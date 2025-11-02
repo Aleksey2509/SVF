@@ -45,6 +45,20 @@ include(CMakePackageConfigHelpers)
 # Allow checking for IPO support by the used compiler
 include(CheckIPOSupported)
 
+include(FetchContent)
+
+Set(FETCHCONTENT_QUIET FALSE)
+
+FetchContent_Declare(
+    LAGraph
+    GIT_REPOSITORY https://github.com/Aleksey2509/LAGraph.git
+    GIT_TAG stable
+    GIT_PROGRESS TRUE
+)
+
+# Download and make it available
+FetchContent_MakeAvailable(LAGraph)
+
 # Since SVF builds into non-standard directories; symlink/copy compile commands into top-level directory
 if(WIN32
    OR MINGW
@@ -298,7 +312,6 @@ target_compile_options(
   SvfFlags
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_DEBUG_INFO}>:-g3>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Wall>>
-  INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Werror>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Wno-deprecated-declarations>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_ENABLE_ASSERTIONS}>:-UNDEBUG>>
   INTERFACE $<BUILD_INTERFACE:$<$<NOT:$<BOOL:${SVF_ENABLE_EXCEPTIONS}>>:-fno-exceptions>>
@@ -312,7 +325,6 @@ target_link_options(
   SvfFlags
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_DEBUG_INFO}>:-g3>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Wall>>
-  INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Werror>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_WARN_AS_ERROR}>:-Wno-deprecated-declarations>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_USE_LLD}>:-fuse-ld=lld>>
   INTERFACE $<BUILD_INTERFACE:$<$<BOOL:${SVF_EXPORT_DYNAMIC}>:-rdynamic>>

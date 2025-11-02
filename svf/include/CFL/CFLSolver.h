@@ -34,6 +34,7 @@
 #include "CFL/CFGrammar.h"
 #include "Util/GeneralType.h"
 #include "Util/WorkList.h"
+#include "LAGraphX.h"
 
 using namespace std;
 

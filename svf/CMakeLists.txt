@@ -18,6 +18,8 @@ target_sources(
 # Only expose the headers in the source tree to in-tree users of SVF
 target_include_directories(SvfCore PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>)
 
+target_link_libraries(SvfCore PUBLIC LAGraphX)
+
 # Set the library & .so version of the core library
 set_target_properties(SvfCore PROPERTIES VERSION ${SVF_VERSION} SOVERSION ${SVF_VERSION_MAJOR})
 

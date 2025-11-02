@@ -205,12 +205,12 @@ BreakConstantGEPs::runOnModule (Module & module)
                 // Scan through the operands of this instruction.  If it is a constant
                 // expression GEP, insert an instruction GEP before the instruction.
                 //
-                Instruction*  I = &(*i);
-                for (u32_t index = 0; index < I->getNumOperands(); ++index)
+                Instruction*  Inst = &(*i);
+                for (u32_t index = 0; index < Inst->getNumOperands(); ++index)
                 {
-                    if (hasConstantExpr(I->getOperand(index)))
+                    if (hasConstantExpr(Inst->getOperand(index)))
                     {
-                        Worklist.push_back (I);
+                        Worklist.push_back (Inst);
                     }
                 }
             }
@@ -228,7 +228,7 @@ BreakConstantGEPs::runOnModule (Module & module)
         //
         while (Worklist.size())
         {
-            Instruction*  I = Worklist.back();
+            Instruction*  Inst = Worklist.back();
             Worklist.pop_back();
 
             //
@@ -237,7 +237,7 @@ BreakConstantGEPs::runOnModule (Module & module)
             // instructions because the new instruction must be added to the
             // appropriate predecessor block.
             //
-            if (PHINode * PHI = SVFUtil::dyn_cast<PHINode>(I))
+            if (PHINode * PHI = SVFUtil::dyn_cast<PHINode>(Inst))
             {
                 for (u32_t index = 0; index < PHI->getNumIncomingValues(); ++index)
                 {
@@ -264,17 +264,17 @@ BreakConstantGEPs::runOnModule (Module & module)
             }
             else
             {
-                for (u32_t index = 0; index < I->getNumOperands(); ++index)
+                for (u32_t index = 0; index < Inst->getNumOperands(); ++index)
                 {
                     //
                     // For other instructions, we want to insert instructions replacing
                     // constant expressions immediately before the instruction using the
                     // constant expression.
                     //
-                    if (ConstantExpr * CE = hasConstantExpr(I->getOperand(index)))
+                    if (ConstantExpr * CE = hasConstantExpr(Inst->getOperand(index)))
                     {
-                        Instruction*  NewInst = convertExpression (CE, I);
-                        I->replaceUsesOfWith (CE, NewInst);
+                        Instruction*  NewInst = convertExpression (CE, Inst);
+                        Inst->replaceUsesOfWith (CE, NewInst);
                         Worklist.push_back (NewInst);
                     }
                 }
