@@ -873,9 +873,9 @@ void LLVMModuleSet::buildFunToFunMap()
 
     auto linkFunctions = [&](Function* caller, Function* callee)
     {
-        for (inst_iterator I = inst_begin(caller), E = inst_end(caller); I != E; ++I)
+        for (inst_iterator It = inst_begin(caller), E = inst_end(caller); It != E; ++It)
         {
-            Instruction *inst = &*I;
+            Instruction *inst = &*It;
 
             if (CallInst *callInst = SVFUtil::dyn_cast<CallInst>(inst))
             {

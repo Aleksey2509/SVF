@@ -123,11 +123,11 @@ SVFIR* SVFIRBuilder::build()
 
                 /// To be noted, we do not record arguments which are in declared function without body
                 /// TODO: what about external functions with SVFIR imported by commandline?
-                for (Function::const_arg_iterator I = fun.arg_begin(), E = fun.arg_end();
-                        I != E; ++I)
+                for (Function::const_arg_iterator It = fun.arg_begin(), E = fun.arg_end();
+                        It != E; ++It)
                 {
-                    setCurrentLocation(&*I,&fun.getEntryBlock());
-                    NodeID argValNodeId = llvmModuleSet()->getValueNode(&*I);
+                    setCurrentLocation(&*It,&fun.getEntryBlock());
+                    NodeID argValNodeId = llvmModuleSet()->getValueNode(&*It);
                     // if this is the function does not have caller (e.g. main)
                     // or a dead function, shall we create a black hole address edge for it?
                     // it is (1) too conservative, and (2) make FormalParmVFGNode defined at blackhole address PAGEdge.
@@ -951,9 +951,9 @@ void SVFIRBuilder::visitGlobal()
     /// initialize global variable
     for (Module &M : llvmModuleSet()->getLLVMModules())
     {
-        for (Module::global_iterator I = M.global_begin(), E = M.global_end(); I != E; ++I)
+        for (Module::global_iterator It = M.global_begin(), E = M.global_end(); It != E; ++It)
         {
-            GlobalVariable *gvar = &*I;
+            GlobalVariable *gvar = &*It;
             NodeID idx = getValueNode(gvar);
             NodeID obj = getObjectNode(gvar);
 
@@ -970,9 +970,9 @@ void SVFIRBuilder::visitGlobal()
 
 
         /// initialize global functions
-        for (Module::const_iterator I = M.begin(), E = M.end(); I != E; ++I)
+        for (Module::const_iterator It = M.begin(), E = M.end(); It != E; ++It)
         {
-            const Function* fun = &*I;
+            const Function* fun = &*It;
             NodeID idx = getValueNode(fun);
             NodeID obj = getObjectNode(fun);
 
@@ -982,9 +982,9 @@ void SVFIRBuilder::visitGlobal()
         }
 
         // Handle global aliases (due to linkage of multiple bc files), e.g., @x = internal alias @y. We need to add a copy from y to x.
-        for (Module::alias_iterator I = M.alias_begin(), E = M.alias_end(); I != E; I++)
+        for (Module::alias_iterator It = M.alias_begin(), E = M.alias_end(); It != E; It++)
         {
-            const GlobalAlias* alias = &*I;
+            const GlobalAlias* alias = &*It;
             NodeID dst = llvmModuleSet()->getValueNode(alias);
             NodeID src = llvmModuleSet()->getValueNode(alias->getAliasee());
             processCE(alias->getAliasee());

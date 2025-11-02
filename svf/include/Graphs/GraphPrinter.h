@@ -88,11 +88,11 @@ public:
 
         O << "Printing VFG Graph" << "'...\n";
         // Print each node name and its edges
-        node_iterator I = GTraits::nodes_begin(GT);
-        node_iterator E = GTraits::nodes_end(GT);
-        for (; I != E; ++I)
+        node_iterator It = GTraits::nodes_begin(GT);
+        node_iterator End = GTraits::nodes_end(GT);
+        for (; It != End; ++It)
         {
-            NodeRef *Node = *I;
+            NodeRef *Node = *It;
             O << "node :" << Node << "'\n";
             child_iterator EI = GTraits::child_begin(Node);
             child_iterator EE = GTraits::child_end(Node);

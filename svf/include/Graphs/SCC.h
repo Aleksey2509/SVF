@@ -331,15 +331,14 @@ public:
         // Visit each unvisited root node.   A root node is defined
         // to be a node that has no incoming copy/skew edges
         clear();
-        node_iterator I = GTraits::nodes_begin(_graph);
-        node_iterator E = GTraits::nodes_end(_graph);
-        for (; I != E; ++I)
+        node_iterator It = GTraits::nodes_begin(_graph);
+        node_iterator End = GTraits::nodes_end(_graph);
+        for (; It != End; ++It)
         {
-            NodeID node = Node_Index(*I);
+            NodeID node = Node_Index(*It);
             if (!this->visited(node))
             {
-                // We skip any nodes that have a representative other than
-                // themselves.  Such nodes occur as a result of merging
+                // We skip any nodes that have a representative other than // themselves.  Such nodes occur as a result of merging
                 // nodes either through unifying an ACC or other node
                 // merging optimizations.  Any such node should have no
                 // outgoing edges and therefore should no longer be a member

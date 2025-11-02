@@ -364,9 +364,9 @@ public:
     /// find_last - Returns the index of the last set bit.
     int find_last() const
     {
-        for (unsigned I = 0; I < BITWORDS_PER_ELEMENT; ++I)
+        for (unsigned Ind = 0; Ind < BITWORDS_PER_ELEMENT; ++Ind)
         {
-            unsigned Idx = BITWORDS_PER_ELEMENT - I - 1;
+            unsigned Idx = BITWORDS_PER_ELEMENT - Ind - 1;
             if (Bits[Idx] != 0)
                 return Idx * BITWORD_SIZE + BITWORD_SIZE -
                        countLeadingZeros(Bits[Idx]) - 1;

@@ -632,13 +632,13 @@ ObjTypeInfo* SymbolTableBuilder::createObjTypeInfo(const Value* val)
 {
     const Type* objTy = nullptr;
 
-    const Instruction* I = SVFUtil::dyn_cast<Instruction>(val);
+    const Instruction* Inst = SVFUtil::dyn_cast<Instruction>(val);
 
     // We consider two types of objects:
     // (1) A heap/static object from a callsite
-    if (I && isNonInstricCallSite(I))
+    if (Inst && isNonInstricCallSite(Inst))
     {
-        objTy = inferTypeOfHeapObjOrStaticObj(I);
+        objTy = inferTypeOfHeapObjOrStaticObj(Inst);
     }
     // (2) Other objects (e.g., alloca, global, etc.)
     else

@@ -33,6 +33,7 @@
 #include "Graphs/CFLGraph.h"
 #include "CFL/CFGrammar.h"
 #include "Util/WorkList.h"
+#include "LAGraphX.h"
 
 using namespace std;
 

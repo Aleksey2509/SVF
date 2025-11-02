@@ -71,8 +71,8 @@ void CHGBuilder::buildCHG()
         DBOUT(DGENERAL, outs() << SVFUtil::pasMsg("construct CHGraph From module "
                 + M.getName().str() + "...\n"));
         readInheritanceMetadataFromModule(M);
-        for (Module::const_global_iterator I = M.global_begin(), E = M.global_end(); I != E; ++I)
-            buildCHGNodes(&(*I));
+        for (Module::const_global_iterator It = M.global_begin(), E = M.global_end(); It != E; ++It)
+            buildCHGNodes(&(*It));
         for (Module::const_iterator F = M.begin(), E = M.end(); F != E; ++F)
             buildCHGNodes(&(*F));
         for (Module::const_iterator F = M.begin(), E = M.end(); F != E; ++F)
@@ -138,13 +138,13 @@ void CHGBuilder::buildCHGEdges(const Function* F)
     {
         for (Function::const_iterator B = F->begin(), E = F->end(); B != E; ++B)
         {
-            for (BasicBlock::const_iterator I = B->begin(), E = B->end(); I != E; ++I)
+            for (BasicBlock::const_iterator It = B->begin(), E = B->end(); It != E; ++It)
             {
-                if (LLVMUtil::isCallSite(&(*I)))
+                if (LLVMUtil::isCallSite(&(*It)))
                 {
-                    connectInheritEdgeViaCall(F, SVFUtil::cast<CallBase>(&(*I)));
+                    connectInheritEdgeViaCall(F, SVFUtil::cast<CallBase>(&(*It)));
                 }
-                else if (const StoreInst *store = SVFUtil::dyn_cast<StoreInst>(&(*I)))
+                else if (const StoreInst *store = SVFUtil::dyn_cast<StoreInst>(&(*It)))
                 {
                     connectInheritEdgeViaStore(F, store);
                 }
@@ -365,10 +365,10 @@ const CHGraph::CHNodeSetTy& CHGBuilder::getInstancesAndDescendants(
  */
 void CHGBuilder::analyzeVTables(const Module &M)
 {
-    for (Module::const_global_iterator I = M.global_begin(),
-            E = M.global_end(); I != E; ++I)
+    for (Module::const_global_iterator It = M.global_begin(),
+            E = M.global_end(); It != E; ++It)
     {
-        const GlobalValue *globalvalue = SVFUtil::dyn_cast<const GlobalValue>(&(*I));
+        const GlobalValue *globalvalue = SVFUtil::dyn_cast<const GlobalValue>(&(*It));
         if (cppUtil::isValVtbl(globalvalue) && globalvalue->getNumOperands() > 0)
         {
             const ConstantStruct *vtblStruct = cppUtil::getVtblStruct(globalvalue);
