@@ -28,13 +28,13 @@
  */
 
 #include "CFL/CFGNormalizer.h"
+#include "SVFIR/SVFValue.h"
 #include "Util/SVFUtil.h"
 #include "Util/WorkList.h"
-#include "SVFIR/SVFValue.h"
-#include <string>
 #include <fstream>
-#include <sstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 using namespace SVF;
 

@@ -27,11 +27,11 @@
  *      Author: Pei Xu
  */
 
-#include <string>
-#include <fstream>
-#include <sstream>
-#include <iostream>
 #include "CFL/GrammarBuilder.h"
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 namespace SVF
 {

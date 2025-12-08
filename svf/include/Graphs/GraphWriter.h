@@ -22,25 +22,28 @@
 #ifndef GRAPHS_GRAPHWRITER_H
 #define GRAPHS_GRAPHWRITER_H
 
-#include "Graphs/GraphTraits.h"
 #include "Graphs/DOTGraphTraits.h"
+#include "Graphs/GraphTraits.h"
 #include <algorithm>
 #include <cstddef>
-#include <iterator>
-#include <string>
-#include <type_traits>
-#include <vector>
+#include <cstdio>
 #include <fstream>
-#include <sstream>
 #include <iostream>
+#include <iterator>
+#include <sstream>
+#include <string>
+#include <sys/wait.h>
+#include <type_traits>
+#include <unistd.h>
+#include <vector>
 
 namespace SVF
 {
 
-namespace DOT    // Private functions...
+namespace DOT // Private functions...
 {
 
-std::string EscapeStr(const std::string &Label);
+std::string EscapeStr(const std::string& Label);
 
 } // end namespace DOT
 
@@ -58,11 +61,10 @@ enum Name
 
 } // end namespace GraphProgram
 
-template<typename GraphType>
-class GraphWriter
+template <typename GraphType> class GraphWriter
 {
-    std::ofstream &O;
-    const GraphType &G;
+    std::ofstream& O;
+    const GraphType& G;
 
     using DOTTraits = DOTGraphTraits<GraphType>;
     using GTraits = GenericGraphTraits<GraphType>;
@@ -342,10 +344,17 @@ std::ofstream &WriteGraph(std::ofstream &O, const GraphType &G,
 /// \return The resulting filename, or an empty string if writing
 /// failed.
 template <typename GraphType>
-std::string WriteGraph(const GraphType &G,
-                       bool ShortNames = false,
+std::string WriteGraph(const GraphType& G, bool ShortNames = false,
                        std::string Filename = "")
 {
+
+    if (Filename.empty())
+    {
+        Filename.resize(L_tmpnam + 1, 0);
+        auto* filePtr = std::tmpnam(Filename.data());
+        if (!filePtr)
+            return "";
+    }
 
     std::ofstream O(Filename);
 
@@ -364,6 +373,61 @@ std::string WriteGraph(const GraphType &G,
     return Filename;
 }
 
+[[maybe_unused]] inline void myViewGraph(std::string DotFileName)
+{
+    std::string pdfFile;
+    pdfFile.resize(L_tmpnam);
+    auto* filePtr = std::tmpnam(pdfFile.data());
+    if (!filePtr)
+        return;
+
+    int DotToPdfChild = fork();
+    if (DotToPdfChild == -1)
+    {
+        std::cerr << "Failed to fork!!!\n";
+        exit(1);
+    }
+    if (DotToPdfChild == 0)
+    {
+        char ToExecute[] = "/usr/bin/dot";
+        std::string arg1 = "-Tpdf";
+        std::string arg2 = "-o";
+        char* argv[] = {ToExecute, arg1.data(), DotFileName.data(), arg2.data(),
+                        pdfFile.data(), 0};
+        char** argvPtr = argv;
+        if (execvp(ToExecute, argvPtr))
+        {
+            perror("Execvp failure:");
+            exit(1);
+        }
+    }
+    else
+    {
+        waitpid(DotToPdfChild, 0, 0);
+    }
+
+    int ViewChild = fork();
+    if (ViewChild == -1)
+    {
+        std::cerr << "Failed to fork!!!\n";
+        exit(1);
+    }
+    if (ViewChild == 0)
+    {
+        char progName[] = "/usr/bin/open";
+        char* argv[] = {progName, pdfFile.data(), 0};
+        if (execvp(progName, argv))
+        {
+            std::cerr << "Failed to execvp!!!\n";
+            exit(1);
+        }
+    }
+    else
+    {
+        waitpid(ViewChild, 0, 0);
+    }
+}
+
 /// ViewGraph - Emit a dot graph, run 'dot', run gv on the postscript file,
 /// then cleanup.  For use from the debugger.
 ///
@@ -372,7 +436,10 @@ void ViewGraph(const GraphType &G,const std::string& name,
                bool ShortNames = false,
                GraphProgram::Name Program = GraphProgram::DOT)
 {
-    SVF::WriteGraph(G, ShortNames);
+    auto TotallyName = SVF::WriteGraph(G, ShortNames);
+    if (TotallyName.empty())
+        return;
+    myViewGraph(TotallyName);
 }
 
 } // end namespace llvm

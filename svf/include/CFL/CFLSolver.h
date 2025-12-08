@@ -30,10 +30,12 @@
 #ifndef INCLUDE_CFL_CFLSolver_H_
 #define INCLUDE_CFL_CFLSolver_H_
 
-#include "Graphs/CFLGraph.h"
 #include "CFL/CFGrammar.h"
-#include "Util/WorkList.h"
+#include "GraphBLAS.h"
+#include "Graphs/CFLGraph.h"
 #include "LAGraphX.h"
+#include "Util/WorkList.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -110,7 +112,121 @@ protected:
     CFGrammar* grammar;
     /// Worklist for resolution
     WorkList worklist;
+};
 
+struct MTXSolver : public CFLSolver
+{
+    MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
+        : CFLSolver(_graph, _grammar)
+    {
+    }
+    std::vector<LAGraph_rule_WCNF> rules;
+    std::unordered_map<int, int> SVFToLAGraphTerm;
+    std::unordered_map<int, int> LAGraphToSVFTerm;
+    std::unordered_map<int, int> SVFToLAGraphNonTerm;
+    std::unordered_map<int, int> LAGraphToSVFNonTerm;
+    std::unordered_map<int, int> SVFTermToLAGraphNonTerm;
+
+    std::unordered_map<int, int> SVFToLAGraphNodes;
+    std::unordered_map<int, int> LAGraphToSVFNodes;
+
+    std::vector<GrB_Matrix> adjMatricesHolder;
+    std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
+        adjMatrices;
+
+    int termsCount{};
+    int nonTermsCount{};
+    size_t nodeNum{};
+
+    int convertToLAGraph(int SVFTermOrNonTerm);
+
+    void setupTermMaps();
+    void setupNonTermMaps();
+
+    void setupGraphNodesMaps();
+
+    void handleNonSingleTermRules();
+    void handleSingleNonTermRules();
+    void convertGrammarToLAGraphRules();
+
+    void convertGraphToLAGraph();
+
+    void convertResultsFromLAGraph(const std::vector<GrB_Matrix>& outputs);
+
+    void initialize() override {}
+
+    void new_init()
+    {
+        rules.clear();
+
+        SVFToLAGraphTerm.clear();
+        LAGraphToSVFTerm.clear();
+        SVFToLAGraphNonTerm.clear();
+        LAGraphToSVFNonTerm.clear();
+
+        SVFToLAGraphNodes.clear();
+        LAGraphToSVFNodes.clear();
+
+        SVFTermToLAGraphNonTerm.clear();
+        adjMatricesHolder.clear();
+        adjMatrices.clear();
+
+        setupTermMaps();
+        setupNonTermMaps();
+        setupGraphNodesMaps();
+        convertGrammarToLAGraphRules();
+        convertGraphToLAGraph();
+    }
+
+    void print()
+    {
+        std::cout << "Printing edges\n";
+        for (auto&& it : graph->getCFLEdges())
+        {
+            auto i = it->getSrcID();
+            auto j = it->getDstID();
+            auto y = it->getEdgeKind();
+            std::cout << "from " << i << " to " << j << " kind " << y << "\n";
+        }
+        for (std::size_t adjMatNum = 0; adjMatNum != adjMatrices.size(); ++adjMatNum)
+        {
+            auto adjMat = adjMatrices[adjMatNum].get();
+            for (std::size_t i = 0; i != nodeNum; ++i)
+            {
+                for (std::size_t j = 0; j != nodeNum; ++j)
+                {
+                    bool x = false;
+                    auto ret_val = GrB_Matrix_extractElement_BOOL(&x, *adjMat, i, j);
+                    assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
+                    if (x)
+                        std::cout << "from " << i << " to " << j << " kind " <<  LAGraphToSVFTerm[adjMatNum] << "\n";
+                }
+            }
+        }
+    }
+    void solve() override
+    {
+        new_init();
+        std::vector<GrB_Matrix> inputs(adjMatrices.size());
+        std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
+                       [](const auto& uniq_ptr) { return *uniq_ptr; });
+
+        std::vector<GrB_Matrix> outputs(nonTermsCount);
+        std::transform(outputs.begin(), outputs.end(), outputs.begin(),
+                       [this](GrB_Matrix mat) {
+                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum,
+                                          nodeNum);
+                           return mat;
+                       });
+
+        LAGraph_CFL_reachability(outputs.data(), inputs.data(), termsCount,
+                                 nonTermsCount, rules.data(), rules.size(),
+                                 nullptr);
+        worklist.clear();
+        convertResultsFromLAGraph(std::move(outputs));
+
+        // CFLSolver::solve();
+    }
 };
 
 /// Solver Utilize CFLData

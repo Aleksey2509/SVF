@@ -207,7 +207,10 @@ void CFLAlias::initialize()
 
 void CFLAlias::initializeSolver()
 {
-    solver = new CFLSolver(graph, grammar);
+    if (std::getenv("USE_NEW"))
+        solver = new MTXSolver(graph, grammar);
+    else
+        solver = new CFLSolver(graph, grammar);
 }
 
 void CFLAlias::finalize()

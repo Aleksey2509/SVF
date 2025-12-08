@@ -286,11 +286,9 @@ install(TARGETS SvfFlags EXPORT SVFTargets)
 # =================================================================================
 
 # If ./Test-Suite exists, add & run the tests
-if(EXISTS "${SVF_SOURCE_DIR}/Test-Suite")
   include(CTest)
   enable_testing()
   add_subdirectory(Test-Suite)
-endif()
 
 # =================================================================================
 # SVF core definitions
