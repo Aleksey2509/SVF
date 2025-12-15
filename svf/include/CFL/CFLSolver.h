@@ -121,11 +121,17 @@ struct MTXSolver : public CFLSolver
     {
     }
     std::vector<LAGraph_rule_WCNF> rules;
-    std::unordered_map<int, int> SVFToLAGraphTerm;
-    std::unordered_map<int, int> LAGraphToSVFTerm;
-    std::unordered_map<int, int> SVFToLAGraphNonTerm;
-    std::unordered_map<int, int> LAGraphToSVFNonTerm;
-    std::unordered_map<int, int> SVFTermToLAGraphNonTerm;
+    std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions, CFGrammar::SymbolHash> origRules;
+
+    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
+        SVFToLAGraphNonTerm;
+    std::unordered_map<int, GrammarBase::Symbol> LAGraphToSVFNonTerm;
+    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
+        SVFToLAGraphTerm;
+    std::unordered_map<int, GrammarBase::Symbol> LAGraphToSVFTerm;
+
+    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash> SVFTermToLAGraphNonTerm;
+    std::unordered_map<int, GrammarBase::Symbol> LAGraphNonTermToSVFTerm;
 
     std::unordered_map<int, int> SVFToLAGraphNodes;
     std::unordered_map<int, int> LAGraphToSVFNodes;
@@ -145,7 +151,6 @@ struct MTXSolver : public CFLSolver
 
     void setupGraphNodesMaps();
 
-    void handleNonSingleTermRules();
     void handleSingleNonTermRules();
     void convertGrammarToLAGraphRules();
 
@@ -171,9 +176,9 @@ struct MTXSolver : public CFLSolver
         adjMatricesHolder.clear();
         adjMatrices.clear();
 
-        setupTermMaps();
-        setupNonTermMaps();
         setupGraphNodesMaps();
+        setupNonTermMaps();
+        setupTermMaps();
         convertGrammarToLAGraphRules();
         convertGraphToLAGraph();
     }
@@ -214,8 +219,7 @@ struct MTXSolver : public CFLSolver
         std::vector<GrB_Matrix> outputs(nonTermsCount);
         std::transform(outputs.begin(), outputs.end(), outputs.begin(),
                        [this](GrB_Matrix mat) {
-                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum,
-                                          nodeNum);
+                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
                            return mat;
                        });
 

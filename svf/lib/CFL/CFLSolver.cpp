@@ -28,6 +28,7 @@
  */
 
 #include "CFL/CFLSolver.h"
+#include "CFL/CFGrammar.h"
 #include <algorithm>
 
 using namespace SVF;
@@ -138,42 +139,137 @@ int MTXSolver::convertToLAGraph(int SVFTermOrNonTerm)
     return SVFToLAGraphNonTerm.at(SVFTermOrNonTerm);
 }
 
+bool checkProductionsSame(
+    const GrammarBase::SymbolMap<GrammarBase::Symbol, GrammarBase::Productions>&
+        firstRHS,
+    const GrammarBase::SymbolMap<GrammarBase::Symbol, GrammarBase::Productions>&
+        secondRHS)
+{
+    GrammarBase::Productions fromFirstRhs;
+    GrammarBase::Productions fromSecondRhs;
+    for (auto& [firstRhs, prods_vec] : firstRHS)
+    {
+        for (auto& prod : prods_vec)
+        {
+            fromFirstRhs.insert(prod);
+        }
+    }
+    for (auto& [secondRhs, prods_vec] : secondRHS)
+    {
+        for (auto& prod : prods_vec)
+        {
+            fromSecondRhs.insert(prod);
+        }
+    }
+
+    return fromFirstRhs == fromSecondRhs;
+}
+
 void MTXSolver::setupTermMaps()
 {
-    std::unordered_set<std::string> SeenTerms;
-    termsCount = grammar->getTerminals().size();
-    int i = 0;
-    for (auto& [termChar, termNumber] : grammar->getTerminals())
+    termsCount = 0;
+    for (auto& [nonterm, prod] : grammar->getSingleRHSToProds())
     {
-        assert(SeenTerms.insert(termChar).second);
-        if (termChar == "epsilon")
+        for (auto& single_prod : prod)
         {
-            SVFToLAGraphTerm[termNumber] = -1;
-            LAGraphToSVFTerm[-1] = termNumber;
-            --termsCount;
-        }
-        else
-        {
-            SVFToLAGraphTerm[termNumber] = i;
-            LAGraphToSVFTerm[i] = termNumber;
-            ++i;
+            assert(single_prod.size() == 2);
+            auto& termOrNonTerm = single_prod.back();
+            if (SVFToLAGraphNonTerm.count(termOrNonTerm) > 0)
+                continue;
+            SVFToLAGraphTerm[termOrNonTerm] = termsCount;
+            LAGraphToSVFTerm[termsCount] = termOrNonTerm;
+            ++termsCount;
         }
     }
-    assert(i == termsCount);
+
+    for (auto& [nonterm, prod] : grammar->getFirstRHSToProds())
+    {
+        for (auto& single_prod : prod)
+        {
+            assert(single_prod.size() == 3);
+            for (auto& termOrNonTerm : single_prod)
+            {
+                if (SVFToLAGraphNonTerm.count(termOrNonTerm) > 0)
+                    continue;
+
+                int newTerm = termsCount;
+                bool alreadyInserted =
+                    SVFToLAGraphTerm.count(termOrNonTerm) > 0;
+                if (alreadyInserted)
+                {
+                    newTerm = SVFToLAGraphTerm.at(termOrNonTerm);
+                }
+                else
+                {
+                    SVFToLAGraphTerm[termOrNonTerm] = newTerm;
+                    LAGraphToSVFTerm[newTerm] = termOrNonTerm;
+                }
+
+                // handle case of rule type A -> Bc by introducing new non term
+                // and doing A -> BD D -> c
+                if (SVFTermToLAGraphNonTerm.count(termOrNonTerm) == 0)
+                {
+                    SVFTermToLAGraphNonTerm[termOrNonTerm] = nonTermsCount;
+                    LAGraphNonTermToSVFTerm[nonTermsCount] = termOrNonTerm;
+
+                    // TODO Should be a separate function call
+                    rules.push_back({.nonterm = nonTermsCount,
+                                     .prod_A = newTerm,
+                                     .prod_B = -1,
+                                     .index = 0});
+                    ++nonTermsCount;
+                }
+                if (!alreadyInserted)
+                    ++termsCount;
+            }
+        }
+    }
+
+    auto& epsilonProds = grammar->getEpsilonProds();
+    if (!epsilonProds.empty())
+    {
+        auto& epsilonTerm = epsilonProds.begin()->back();
+        SVFToLAGraphTerm[epsilonTerm] = -1;
+        LAGraphToSVFTerm[-1] = epsilonTerm;
+    }
 }
+
 void MTXSolver::setupNonTermMaps()
 {
-    std::unordered_set<std::string> SeenNonTerms;
-    nonTermsCount = grammar->getNonterminals().size();
-    int i = 0;
-    for (auto& [nontermChar, nontermNumber] : grammar->getNonterminals())
+    assert(checkProductionsSame(grammar->getFirstRHSToProds(),
+                                grammar->getSecondRHSToProds()));
+    // Nonterm map creation
+    std::unordered_set<int> origTerms;
+    for (auto& [termName, termId] : grammar->getTerminals())
+        origTerms.insert(termId);
+
+    nonTermsCount = 0;
+    for (auto& [singleRhs, prods_vec] : grammar->getSingleRHSToProds())
     {
-        assert(SeenNonTerms.insert(nontermChar).second);
-        SVFToLAGraphNonTerm[nontermNumber] = i;
-        LAGraphToSVFNonTerm[i] = nontermNumber;
-        ++i;
+        for (auto& prod : prods_vec)
+        {
+            auto& nonterm = grammar->getLHSSymbol(prod);
+            assert(origTerms.count(nonterm.kind) == 0);
+            origRules[nonterm].insert({prod.at(1)});
+
+            SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
+            LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
+            ++nonTermsCount;
+        }
     }
-    assert(i == nonTermsCount);
+    for (auto& [firstRhs, prods_vec] : grammar->getFirstRHSToProds())
+    {
+        for (auto& prod : prods_vec)
+        {
+            auto& nonterm = grammar->getLHSSymbol(prod);
+            assert(origTerms.count(nonterm.kind) == 0);
+            origRules[nonterm].insert({prod.at(1), prod.at(2)});
+
+            SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
+            LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
+            ++nonTermsCount;
+        }
+    }
 }
 
 void MTXSolver::setupGraphNodesMaps()
@@ -187,81 +283,48 @@ void MTXSolver::setupGraphNodesMaps()
     }
 }
 
-void MTXSolver::handleNonSingleTermRules()
-{
-    auto firstRHSToProds = grammar->getFirstRHSToProds();
-    auto secondRHSToProds = grammar->getSecondRHSToProds();
-    auto& singleRHStoProds = grammar->getSingleRHSToProds();
-    std::unordered_set<int> termsNotExclusive;
-    for (auto& [term_name, term] : grammar->getTerminals())
-    {
-        if (firstRHSToProds.count(term) || secondRHSToProds.count(term))
-        {
-            assert(!singleRHStoProds.count(term) &&
-                   "Well, found case where they have rule A->a "
-                   "and rule B->Ca for some reason");
-            termsNotExclusive.insert(term);
-        }
-    }
-
-    for (auto& curTerm : termsNotExclusive)
-    {
-        auto newNonTerm = nonTermsCount++;
-        SVFTermToLAGraphNonTerm[curTerm] = newNonTerm;
-        LAGraph_rule_WCNF newRule{.nonterm = newNonTerm,
-                                  .prod_A = SVFToLAGraphTerm.at(curTerm),
-                                  .prod_B = -1,
-                                  .index = 0};
-        rules.push_back(newRule);
-    }
-}
-
 void MTXSolver::handleSingleNonTermRules()
 {
-    auto& singleRHStoProds = grammar->getSingleRHSToProds();
-    auto& rawProds = grammar->getRawProductions();
     bool changed = true;
+    auto newOrigRules = origRules;
     while (changed)
     {
         changed = false;
-        for (auto& [non_term_name, non_term] : grammar->getNonterminals())
+        for (auto& [nonTerm, prods_vec] : origRules)
         {
-            if (singleRHStoProds.count(non_term) == 0)
-                continue;
-
-            auto& prods_to_copy = rawProds[non_term];
-            for (auto& prod : singleRHStoProds[non_term])
+            for (auto& prod : prods_vec)
             {
-                auto& to_copy_to = prod[0];
-                for (auto& single_prod : prods_to_copy)
-                    rawProds[to_copy_to].insert(single_prod);
-
-                auto to_erase_it = std::find_if(
-                    rawProds[to_copy_to].begin(), rawProds[to_copy_to].end(),
-                    [non_term](const std::vector<Symbol>& vec) {
-                        return vec.size() == 1 && vec.front().kind == non_term;
-                    });
-                rawProds[to_copy_to].erase(to_erase_it);
+                if (prod.size() != 1 ||
+                    SVFToLAGraphNonTerm.count(prod.front()) == 0)
+                    continue;
+                auto& singleNonTerm = prod.front();
+                std::copy(origRules[singleNonTerm].begin(),
+                          origRules[singleNonTerm].end(),
+                          std::inserter(newOrigRules[nonTerm],
+                                        newOrigRules[nonTerm].begin()));
+                newOrigRules[nonTerm].erase(prod);
+                changed = true;
             }
-            singleRHStoProds.erase(non_term);
-            changed = true;
         }
+        origRules = newOrigRules;
     }
 }
 
 void MTXSolver::convertGrammarToLAGraphRules()
 {
-    for (auto& prodSet : grammar->getRawProductions())
-    {
-        for (auto& prodVec : prodSet.second)
-            assert(prodVec.size() > 0 && prodVec.size() < 3 &&
-                   "Bad grammar form!");
-    }
-
-    handleNonSingleTermRules();
     handleSingleNonTermRules();
 
-    auto convertSVFNonTermToLAGraph = [this](int kind) {
+    for (auto& epsilonProd : grammar->getEpsilonProds())
+    {
+        assert(epsilonProd.size() == 2);
+        assert(SVFToLAGraphTerm.at(epsilonProd.back()) == -1);
+        rules.push_back({.nonterm = SVFToLAGraphNonTerm.at(epsilonProd.front()),
+                         .prod_A = -1,
+                         .prod_B = -1,
+                         .index = 0});
+    }
+
+    auto convertSVFNonTermToLAGraph = [this](GrammarBase::Symbol kind) {
         if (SVFTermToLAGraphNonTerm.count(kind) > 0)
         {
             return SVFTermToLAGraphNonTerm[kind];
@@ -269,26 +332,30 @@ void MTXSolver::convertGrammarToLAGraphRules()
         return SVFToLAGraphNonTerm.at(kind);
     };
 
-    for (auto& prodSet : grammar->getRawProductions())
+    for (auto& [nonTerm, prods_vec] : origRules)
     {
-        auto& lhs = prodSet.first;
-        for (auto& prodVec : prodSet.second)
+        for (auto& prod : prods_vec)
         {
             LAGraph_rule_WCNF newRule{.nonterm =
-                                          SVFToLAGraphNonTerm.at(lhs.kind),
+                                          SVFToLAGraphNonTerm.at(nonTerm),
                                       .prod_A = -1,
                                       .prod_B = -1,
                                       .index = 0};
-            if (prodVec.size() == 1)
+
+            if (prod.size() == 1)
             {
-                newRule.prod_A = SVFToLAGraphTerm.at(prodVec[0].kind);
+                newRule.prod_A = SVFToLAGraphTerm.at(prod.at(0));
+            }
+            else if (prod.size() == 2)
+            {
+                newRule.prod_A = convertSVFNonTermToLAGraph(prod.at(0));
+                newRule.prod_B = convertSVFNonTermToLAGraph(prod.at(1));
             }
             else
             {
-                newRule.prod_A = convertSVFNonTermToLAGraph(prodVec[0].kind);
-                newRule.prod_B = convertSVFNonTermToLAGraph(prodVec[1].kind);
+                assert(false && "Wrong size of prods vec!!!!\n");
             }
-            rules.push_back(newRule);
+            rules.push_back(std::move(newRule));
         }
     }
 }
@@ -303,10 +370,10 @@ void MTXSolver::convertGraphToLAGraph()
     assert(SVFToLAGraphNodes.size() == nodeNum);
     for (auto& edgeIt : graph->getCFLEdges())
     {
-        auto svfEdgeKind = edgeIt->getEdgeKind();
-        if (SVFToLAGraphTerm.count(svfEdgeKind) == 0)
+        auto LAGraphTerm = GrammarBase::Symbol(edgeIt->getEdgeKind());
+        if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
             continue;
-        auto edgeKind = SVFToLAGraphTerm.at(svfEdgeKind);
+        auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
         auto srcId = SVFToLAGraphNodes.at(edgeIt->getSrcID());
         auto dstId = SVFToLAGraphNodes.at(edgeIt->getDstID());
         if (edgeKind != -1)
@@ -329,8 +396,8 @@ void MTXSolver::convertGraphToLAGraph()
             // std::cout << "Setting {" << LAGraphToSVFNodes.at(srcId) << ", "
             //           << LAGraphToSVFNodes.at(dstId) << "} in " << i
             //           << std::endl;
-            assert(srcId < nodeNum);
-            assert(dstId < nodeNum);
+            assert(size_t(srcId) < nodeNum);
+            assert(size_t(dstId) < nodeNum);
             assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
                                               dstId) == GrB_SUCCESS);
         }
@@ -340,10 +407,11 @@ void MTXSolver::convertGraphToLAGraph()
 void MTXSolver::convertResultsFromLAGraph(
     const std::vector<GrB_Matrix>& outputs)
 {
-    for (int LAGraphNonTermId = 0,
-             endI = outputs.size() - SVFTermToLAGraphNonTerm.size();
+    for (int LAGraphNonTermId = 0, endI = outputs.size();
          LAGraphNonTermId != endI; ++LAGraphNonTermId)
     {
+        if (LAGraphToSVFNonTerm.count(LAGraphNonTermId) == 0)
+            continue;
         auto matrix = outputs[LAGraphNonTermId];
         for (size_t i = 0; i != nodeNum; ++i)
         {
