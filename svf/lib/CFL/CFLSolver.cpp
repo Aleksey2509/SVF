@@ -244,6 +244,11 @@ void MTXSolver::setupNonTermMaps()
         origTerms.insert(termId);
 
     nonTermsCount = 0;
+    GrammarBase::Symbol startSymbol = grammar->getStartKind();
+    SVFToLAGraphNonTerm[startSymbol] = nonTermsCount;
+    LAGraphToSVFNonTerm[nonTermsCount] = grammar->getStartKind();
+    ++nonTermsCount;
+
     for (auto& [singleRhs, prods_vec] : grammar->getSingleRHSToProds())
     {
         for (auto& prod : prods_vec)
@@ -252,9 +257,12 @@ void MTXSolver::setupNonTermMaps()
             assert(origTerms.count(nonterm.kind) == 0);
             origRules[nonterm].insert({prod.at(1)});
 
-            SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
-            LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
-            ++nonTermsCount;
+            if (SVFToLAGraphNonTerm.count(nonterm) == 0)
+            {
+                SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
+                LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
+                ++nonTermsCount;
+            }
         }
     }
     for (auto& [firstRhs, prods_vec] : grammar->getFirstRHSToProds())
@@ -265,9 +273,12 @@ void MTXSolver::setupNonTermMaps()
             assert(origTerms.count(nonterm.kind) == 0);
             origRules[nonterm].insert({prod.at(1), prod.at(2)});
 
-            SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
-            LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
-            ++nonTermsCount;
+            if (SVFToLAGraphNonTerm.count(nonterm) == 0)
+            {
+                SVFToLAGraphNonTerm[nonterm] = nonTermsCount;
+                LAGraphToSVFNonTerm[nonTermsCount] = nonterm;
+                ++nonTermsCount;
+            }
         }
     }
 }
