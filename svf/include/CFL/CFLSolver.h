@@ -119,9 +119,15 @@ struct MTXSolver : public CFLSolver
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
+        setupGraphNodesMaps();
+        setupNonTermMaps();
+        setupTermMaps();
+        convertGrammarToLAGraphRules();
     }
     std::vector<LAGraph_rule_WCNF> rules;
-    std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions, CFGrammar::SymbolHash> origRules;
+    std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions,
+                       CFGrammar::SymbolHash>
+        origRules;
 
     std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
         SVFToLAGraphNonTerm;
@@ -130,7 +136,8 @@ struct MTXSolver : public CFLSolver
         SVFToLAGraphTerm;
     std::unordered_map<int, GrammarBase::Symbol> LAGraphToSVFTerm;
 
-    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash> SVFTermToLAGraphNonTerm;
+    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
+        SVFTermToLAGraphNonTerm;
     std::unordered_map<int, GrammarBase::Symbol> LAGraphNonTermToSVFTerm;
 
     std::unordered_map<int, int> SVFToLAGraphNodes;
@@ -143,6 +150,38 @@ struct MTXSolver : public CFLSolver
     int termsCount{};
     int nonTermsCount{};
     size_t nodeNum{};
+    bool yetToBeSolved = false;
+
+    inline bool pushIntoWorklist(const CFLEdge* item) override
+    {
+        auto LAGraphTerm = GrammarBase::Symbol(item->getEdgeKind());
+        if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
+            return false;
+
+        auto srcId = SVFToLAGraphNodes.at(item->getSrcID());
+        auto dstId = SVFToLAGraphNodes.at(item->getDstID());
+        auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
+        assert(edgeKind != -1);
+
+        GrB_Matrix* curTermMatrix = adjMatrices[edgeKind].get();
+        bool x = false;
+        auto ret_val =
+            GrB_Matrix_extractElement_BOOL(&x, *curTermMatrix, srcId, dstId);
+        assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
+        if ((ret_val == GrB_SUCCESS) && x)
+            return false;
+
+        assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId, dstId) ==
+               GrB_SUCCESS);
+        yetToBeSolved = true;
+
+        return true;
+    }
+
+    inline bool isWorklistEmpty() override
+    {
+        return !yetToBeSolved;
+    }
 
     int convertToLAGraph(int SVFTermOrNonTerm);
 
@@ -158,29 +197,10 @@ struct MTXSolver : public CFLSolver
 
     void convertResultsFromLAGraph(const std::vector<GrB_Matrix>& outputs);
 
-    void initialize() override {}
-
-    void new_init()
+    void initialize() override
     {
-        rules.clear();
-
-        SVFToLAGraphTerm.clear();
-        LAGraphToSVFTerm.clear();
-        SVFToLAGraphNonTerm.clear();
-        LAGraphToSVFNonTerm.clear();
-
-        SVFToLAGraphNodes.clear();
-        LAGraphToSVFNodes.clear();
-
-        SVFTermToLAGraphNonTerm.clear();
-        adjMatricesHolder.clear();
-        adjMatrices.clear();
-
-        setupGraphNodesMaps();
-        setupNonTermMaps();
-        setupTermMaps();
-        convertGrammarToLAGraphRules();
         convertGraphToLAGraph();
+        yetToBeSolved = true;
     }
 
     void print()
@@ -201,17 +221,19 @@ struct MTXSolver : public CFLSolver
                 for (std::size_t j = 0; j != nodeNum; ++j)
                 {
                     bool x = false;
-                    auto ret_val = GrB_Matrix_extractElement_BOOL(&x, *adjMat, i, j);
+                    auto ret_val =
+                        GrB_Matrix_extractElement_BOOL(&x, *adjMat, i, j);
                     assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
                     if (x)
-                        std::cout << "from " << i << " to " << j << " kind " <<  LAGraphToSVFTerm[adjMatNum] << "\n";
+                        std::cout << "from " << i << " to " << j << " kind "
+                                  << LAGraphToSVFTerm[adjMatNum] << "\n";
                 }
             }
         }
     }
     void solve() override
     {
-        new_init();
+        initialize();
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
@@ -226,6 +248,7 @@ struct MTXSolver : public CFLSolver
         LAGraph_CFL_reachability(outputs.data(), inputs.data(), termsCount,
                                  nonTermsCount, rules.data(), rules.size(),
                                  nullptr);
+        yetToBeSolved = false;
         worklist.clear();
         convertResultsFromLAGraph(std::move(outputs));
 
