@@ -207,10 +207,21 @@ void CFLAlias::initialize()
 
 void CFLAlias::initializeSolver()
 {
-    if (std::getenv("USE_NEW"))
+    if (std::getenv("USE_SUPER"))
+    {
+        solver = new MTXAdvancedSolver(graph, grammar);
+        std::cout << "Using newest MTX";
+    }
+    else if (std::getenv("USE_NEW"))
+    {
         solver = new MTXSolver(graph, grammar);
+        std::cout << "Using MTX";
+    }
     else
+    {
         solver = new CFLSolver(graph, grammar);
+        std::cout << "Using non MTX\n";
+    }
 }
 
 void CFLAlias::finalize()
