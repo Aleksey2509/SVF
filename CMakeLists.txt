@@ -52,7 +52,7 @@ Set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(
     LAGraph
     GIT_REPOSITORY https://github.com/Aleksey2509/LAGraph.git
-    GIT_TAG stable
+    GIT_TAG homka122/CFL_optimizations
     GIT_PROGRESS TRUE
 )
 
