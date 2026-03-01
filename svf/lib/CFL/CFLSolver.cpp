@@ -139,7 +139,7 @@ int MTXSolver::convertToLAGraph(int SVFTermOrNonTerm)
     return SVFToLAGraphNonTerm.at(SVFTermOrNonTerm);
 }
 
-bool checkProductionsSame(
+static bool checkProductionsSame(
     const GrammarBase::SymbolMap<GrammarBase::Symbol, GrammarBase::Productions>&
         firstRHS,
     const GrammarBase::SymbolMap<GrammarBase::Symbol, GrammarBase::Productions>&
@@ -373,24 +373,10 @@ void MTXSolver::convertGrammarToLAGraphRules()
 
 void MTXSolver::convertGraphToLAGraph()
 {
-    LAGraph_Init(nullptr);
-
     // terminal to edge map
-    std::unordered_map<int, std::vector<std::pair<int, int>>> adjMat;
+    setupGraphNodesMaps();
     nodeNum = graph->getTotalNodeNum();
     assert(SVFToLAGraphNodes.size() == nodeNum);
-    for (auto& edgeIt : graph->getCFLEdges())
-    {
-        auto LAGraphTerm = GrammarBase::Symbol(edgeIt->getEdgeKind());
-        if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
-            continue;
-        auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
-        auto srcId = SVFToLAGraphNodes.at(edgeIt->getSrcID());
-        auto dstId = SVFToLAGraphNodes.at(edgeIt->getDstID());
-        if (edgeKind != -1)
-            adjMat[edgeKind].push_back({srcId, dstId});
-    }
-
     adjMatricesHolder.resize(termsCount);
     for (int i = 0; i != termsCount; ++i)
     {
@@ -400,18 +386,23 @@ void MTXSolver::convertGraphToLAGraph()
         GrB_Matrix* curTermMatrix = adjMatrices[i].get();
         assert(GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum) ==
                GrB_SUCCESS);
+    }
 
-        auto& matForCurTerm = adjMat[i];
-        for (auto& [srcId, dstId] : matForCurTerm)
-        {
-            // std::cout << "Setting {" << LAGraphToSVFNodes.at(srcId) << ", "
-            //           << LAGraphToSVFNodes.at(dstId) << "} in " << i
-            //           << std::endl;
-            assert(size_t(srcId) < nodeNum);
-            assert(size_t(dstId) < nodeNum);
-            assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
-                                              dstId) == GrB_SUCCESS);
-        }
+    for (auto& edgeIt : graph->getCFLEdges())
+    {
+        auto LAGraphTerm = GrammarBase::Symbol(edgeIt->getEdgeKind());
+        if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
+            continue;
+
+        auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
+        if (edgeKind == -1)
+            continue;
+
+        auto srcId = SVFToLAGraphNodes.at(edgeIt->getSrcID());
+        auto dstId = SVFToLAGraphNodes.at(edgeIt->getDstID());
+        GrB_Matrix* curTermMatrix = adjMatrices[edgeKind].get();
+        assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId, dstId) ==
+               GrB_SUCCESS);
     }
 }
 
@@ -423,22 +414,26 @@ void MTXSolver::convertResultsFromLAGraph(
     {
         if (LAGraphToSVFNonTerm.count(LAGraphNonTermId) == 0)
             continue;
+
+        auto Label = LAGraphToSVFNonTerm[LAGraphNonTermId];
         auto matrix = outputs[LAGraphNonTermId];
-        for (size_t i = 0; i != nodeNum; ++i)
+        GrB_Index nonZeroElems = 0;
+        assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
+               "On matrix nonzero element amount extraction");
+        std::vector<GrB_Index> rowIndices(nonZeroElems);
+        std::vector<GrB_Index> colIndices(nonZeroElems);
+        auto vals = std::make_unique<bool[]>(nonZeroElems);
+        GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
+                                      vals.get(), &nonZeroElems, matrix);
+        for (size_t i = 0; i < nonZeroElems; ++i)
         {
-            for (size_t j = 0; j != nodeNum; ++j)
-            {
-                bool x = false;
-                auto ret_val = GrB_Matrix_extractElement_BOOL(&x, matrix, i, j);
-                assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
-                if (x)
-                {
-                    auto* SrcNode = graph->getGNode(LAGraphToSVFNodes.at(i));
-                    auto* DstNode = graph->getGNode(LAGraphToSVFNodes.at(j));
-                    auto Label = LAGraphToSVFNonTerm[LAGraphNonTermId];
-                    graph->addCFLEdge(SrcNode, DstNode, Label);
-                }
-            }
+            if (!vals[i])
+                continue;
+            auto* SrcNode =
+                graph->getGNode(LAGraphToSVFNodes.at(rowIndices[i]));
+            auto* DstNode =
+                graph->getGNode(LAGraphToSVFNodes.at(colIndices[i]));
+            graph->addCFLEdge(SrcNode, DstNode, Label);
         }
     }
 }

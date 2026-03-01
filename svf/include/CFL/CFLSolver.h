@@ -119,6 +119,7 @@ struct MTXSolver : public CFLSolver
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
+        LAGraph_Init(nullptr);
         setupGraphNodesMaps();
         setupNonTermMaps();
         setupTermMaps();
@@ -213,7 +214,8 @@ struct MTXSolver : public CFLSolver
             auto y = it->getEdgeKind();
             std::cout << "from " << i << " to " << j << " kind " << y << "\n";
         }
-        for (std::size_t adjMatNum = 0; adjMatNum != adjMatrices.size(); ++adjMatNum)
+        for (std::size_t adjMatNum = 0; adjMatNum != adjMatrices.size();
+             ++adjMatNum)
         {
             auto adjMat = adjMatrices[adjMatNum].get();
             for (std::size_t i = 0; i != nodeNum; ++i)
@@ -269,10 +271,7 @@ struct MTXAdvancedSolver : public CFLSolver
             ++i;
         }
         setupRules();
-        convertGrammarToLAGraphRules();
     }
-
-    void convertGrammarToLAGraphRules() {}
 
     void insertSymbols(
         const std::unordered_set<int>& symbolsSet,
@@ -286,9 +285,9 @@ struct MTXAdvancedSolver : public CFLSolver
             CFGrammar::Symbol newNonTermSymbol = sym;
             for (int i = 0; i != maxVal + 1; ++i)
             {
-                SVFToLAGraphSymbol[newNonTermSymbol] = symbols_count;
-                LAGraphToSVFSymbol[symbols_count] = newNonTermSymbol;
-                ++symbols_count;
+                SVFToLAGraphSymbol[newNonTermSymbol] = symbolsCount;
+                LAGraphToSVFSymbol[symbolsCount] = newNonTermSymbol;
+                ++symbolsCount;
                 ++newNonTermSymbol.attribute;
             }
         }
@@ -378,9 +377,9 @@ struct MTXAdvancedSolver : public CFLSolver
         CFGrammar::Symbol newNonTermSymbol = StartNonTerm;
         for (int i = 0; i != maxVal + 1; ++i)
         {
-            SVFToLAGraphSymbol[newNonTermSymbol] = symbols_count;
-            LAGraphToSVFSymbol[symbols_count] = newNonTermSymbol;
-            ++symbols_count;
+            SVFToLAGraphSymbol[newNonTermSymbol] = symbolsCount;
+            LAGraphToSVFSymbol[symbolsCount] = newNonTermSymbol;
+            ++symbolsCount;
             ++newNonTermSymbol.attribute;
         }
 
@@ -521,10 +520,10 @@ struct MTXAdvancedSolver : public CFLSolver
 
         // TODO Wrong? Should account for additional indices of symbols,
         // added when finding max of index
-        adjMatricesHolder.resize(symbols_count);
+        adjMatricesHolder.resize(symbolsCount);
         adjMatrices.clear();
-        adjMatrices.reserve(symbols_count);
-        for (int i = 0; i != int(symbols_count); ++i)
+        adjMatrices.reserve(symbolsCount);
+        for (int i = 0; i != int(symbolsCount); ++i)
         {
             adjMatrices.push_back(
                 std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>{
@@ -539,9 +538,6 @@ struct MTXAdvancedSolver : public CFLSolver
             auto SVFSymbol = GrammarBase::Symbol(edgeIt->getEdgeKind());
             int edgeKind = SVFToLAGraphSymbol.at(SVFSymbol);
             if (edgeKind == -1)
-                continue;
-
-            if (edgeIt->getSrcID() < 172 || edgeIt->getDstID() < 172)
                 continue;
 
             auto srcId = SVFToLAGraphNodes.at(edgeIt->getSrcID());
@@ -702,9 +698,9 @@ struct MTXAdvancedSolver : public CFLSolver
              LAGraphSymbolId != endI; ++LAGraphSymbolId)
         {
             auto matrix = outputs[LAGraphSymbolId];
-            for (size_t i = 0; i != nodeNum; ++i)
+            for (int i = 0; i != nodeNum; ++i)
             {
-                for (size_t j = 0; j != nodeNum; ++j)
+                for (int j = 0; j != nodeNum; ++j)
                 {
                     bool x = false;
                     auto ret_val =
@@ -724,7 +720,7 @@ struct MTXAdvancedSolver : public CFLSolver
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
-        std::vector<GrB_Matrix> outputs(symbols_count);
+        std::vector<GrB_Matrix> outputs(symbolsCount);
         std::transform(outputs.begin(), outputs.end(), outputs.begin(),
                        [this](GrB_Matrix mat) {
                            GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
@@ -735,7 +731,7 @@ struct MTXAdvancedSolver : public CFLSolver
         auto rules = initRules();
 
         LAGraph_CFL_reachability_adv(outputs.data(), inputs.data(),
-                                     symbols_count, rules.data(), rules.size(),
+                                     symbolsCount, rules.data(), rules.size(),
                                      nullptr, 0);
         yetToBeSolved = false;
         worklist.clear();
@@ -745,7 +741,7 @@ struct MTXAdvancedSolver : public CFLSolver
 private:
     bool yetToBeSolved = false;
     // TODO Style
-    size_t symbols_count = 0;
+    size_t symbolsCount = 0;
     size_t nodeNum = 0;
     std::unordered_map<int, int> SVFToLAGraphNodes;
     std::unordered_map<int, int> LAGraphToSVFNodes;

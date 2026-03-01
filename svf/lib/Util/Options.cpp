@@ -751,6 +751,21 @@ const Option<bool> Options::CFLSVFG(
     false
 );
 
+const Option<bool> Options::MTXAlias
+(
+    "mtx-alias",
+    "When explicit to true, cfl data builder will use matrix algorithm for solving reachability problem ",
+    false
+);
+
+const Option<bool> Options::AdvancedMTXAlias
+(
+    "adv-mtx-alias",
+    "When explicit to true, cfl data builder will use advanced matrix algorithm for solving reachability problem ",
+    false
+
+);
+
 const Option<bool> Options::POCRAlias(
     "pocr-alias",
     "When explicit to true, cfl data builder will transfer CFL graph to CFLData.",
