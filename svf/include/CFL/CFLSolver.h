@@ -31,7 +31,6 @@
 #define INCLUDE_CFL_CFLSolver_H_
 
 #include "CFL/CFGrammar.h"
-#include "GraphBLAS.h"
 #include "Graphs/CFLGraph.h"
 #include "LAGraphX.h"
 #include "Util/WorkList.h"
