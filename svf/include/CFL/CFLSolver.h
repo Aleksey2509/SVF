@@ -159,6 +159,9 @@ struct MTXSolver : public CFLSolver
         if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
             return false;
 
+        if (!SVFToLAGraphNodes.count(item->getSrcID()) || !SVFToLAGraphNodes.count(item->getDstID()))
+            setupGraphNodesMaps();
+
         auto srcId = SVFToLAGraphNodes.at(item->getSrcID());
         auto dstId = SVFToLAGraphNodes.at(item->getDstID());
         auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
