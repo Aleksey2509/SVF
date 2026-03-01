@@ -66,7 +66,18 @@ void CFLVF::initialize()
     normalizeCFLGrammar();
 
     // Initialize solver
-    solver = new CFLSolver(graph, grammar);
+    if (Options::AdvancedMTXAlias() == true)
+    {
+        solver = new MTXAdvancedSolver(graph, grammar);
+    }
+    else if (Options::MTXAlias() == true)
+    {
+        solver = new MTXSolver(graph, grammar);
+    }
+    else
+    {
+        solver = new CFLSolver(graph, grammar);
+    }
 }
 
 void CFLVF::checkParameter()

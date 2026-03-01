@@ -119,6 +119,7 @@ struct MTXSolver : public CFLSolver
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
+        LAGraph_Init(nullptr);
         setupGraphNodesMaps();
         setupNonTermMaps();
         setupTermMaps();
@@ -157,6 +158,9 @@ struct MTXSolver : public CFLSolver
         auto LAGraphTerm = GrammarBase::Symbol(item->getEdgeKind());
         if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
             return false;
+
+        if (!SVFToLAGraphNodes.count(item->getSrcID()) || !SVFToLAGraphNodes.count(item->getDstID()))
+            setupGraphNodesMaps();
 
         auto srcId = SVFToLAGraphNodes.at(item->getSrcID());
         auto dstId = SVFToLAGraphNodes.at(item->getDstID());
@@ -213,7 +217,8 @@ struct MTXSolver : public CFLSolver
             auto y = it->getEdgeKind();
             std::cout << "from " << i << " to " << j << " kind " << y << "\n";
         }
-        for (std::size_t adjMatNum = 0; adjMatNum != adjMatrices.size(); ++adjMatNum)
+        for (std::size_t adjMatNum = 0; adjMatNum != adjMatrices.size();
+             ++adjMatNum)
         {
             auto adjMat = adjMatrices[adjMatNum].get();
             for (std::size_t i = 0; i != nodeNum; ++i)

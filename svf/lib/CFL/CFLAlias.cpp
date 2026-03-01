@@ -207,10 +207,18 @@ void CFLAlias::initialize()
 
 void CFLAlias::initializeSolver()
 {
-    if (std::getenv("USE_NEW"))
+    if (Options::AdvancedMTXAlias() == true)
+    {
+        solver = new MTXAdvancedSolver(graph, grammar);
+    }
+    else if (Options::MTXAlias() == true)
+    {
         solver = new MTXSolver(graph, grammar);
+    }
     else
+    {
         solver = new CFLSolver(graph, grammar);
+    }
 }
 
 void CFLAlias::finalize()

@@ -286,9 +286,12 @@ install(TARGETS SvfFlags EXPORT SVFTargets)
 # =================================================================================
 
 # If ./Test-Suite exists, add & run the tests
+set(TEST_SUITE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Test-Suite")
+if(EXISTS "${TEST_SUITE_PATH}")
   include(CTest)
   enable_testing()
   add_subdirectory(Test-Suite)
+endif()
 
 # =================================================================================
 # SVF core definitions
