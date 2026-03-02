@@ -155,28 +155,8 @@ struct MTXSolver : public CFLSolver
 
     inline bool pushIntoWorklist(const CFLEdge* item) override
     {
-        auto LAGraphTerm = GrammarBase::Symbol(item->getEdgeKind());
-        if (SVFToLAGraphTerm.count(LAGraphTerm) == 0)
-            return false;
-
-        if (!SVFToLAGraphNodes.count(item->getSrcID()) || !SVFToLAGraphNodes.count(item->getDstID()))
-            setupGraphNodesMaps();
-
-        auto srcId = SVFToLAGraphNodes.at(item->getSrcID());
-        auto dstId = SVFToLAGraphNodes.at(item->getDstID());
-        auto edgeKind = SVFToLAGraphTerm.at(LAGraphTerm);
-        assert(edgeKind != -1);
-
-        GrB_Matrix* curTermMatrix = adjMatrices[edgeKind].get();
-        bool x = false;
-        auto ret_val =
-            GrB_Matrix_extractElement_BOOL(&x, *curTermMatrix, srcId, dstId);
-        assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
-        if ((ret_val == GrB_SUCCESS) && x)
-            return false;
-
-        assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId, dstId) ==
-               GrB_SUCCESS);
+        // Will redo the initialization in initialize() anyway.
+        // Just set the flag, that we are not done
         yetToBeSolved = true;
 
         return true;
