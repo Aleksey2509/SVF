@@ -34,8 +34,10 @@
 #include "GraphBLAS.h"
 #include "Graphs/CFLGraph.h"
 #include "LAGraphX.h"
+#include "Util/Options.h"
 #include "Util/WorkList.h"
 #include <algorithm>
+#include <chrono>
 
 using namespace std;
 
@@ -120,7 +122,6 @@ struct MTXSolver : public CFLSolver
         : CFLSolver(_graph, _grammar)
     {
         LAGraph_Init(nullptr);
-        setupGraphNodesMaps();
         setupNonTermMaps();
         setupTermMaps();
         convertGrammarToLAGraphRules();
@@ -179,6 +180,7 @@ struct MTXSolver : public CFLSolver
 
     void convertGraphToLAGraph();
 
+    void convertResultFromLAGraph(GrB_Matrix output, Symbol label);
     void convertResultsFromLAGraph(const std::vector<GrB_Matrix>& outputs);
 
     void initialize() override
@@ -218,6 +220,7 @@ struct MTXSolver : public CFLSolver
     }
     void solve() override
     {
+        auto begin_init = std::chrono::high_resolution_clock::now();
         initialize();
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
@@ -229,15 +232,52 @@ struct MTXSolver : public CFLSolver
                            GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
                            return mat;
                        });
+        auto end_init = std::chrono::high_resolution_clock::now();
+        if (Options::CFLAliasMeasureAlgorithmRuntime())
+        {
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            end_init - begin_init)
+                            .count();
+            std::cout << "MTX: for init time passed: " << diff << " ms"
+                      << std::endl;
+        }
 
+        auto begin_first = std::chrono::high_resolution_clock::now();
         LAGraph_CFL_reachability(outputs.data(), inputs.data(), termsCount,
                                  nonTermsCount, rules.data(), rules.size(),
                                  nullptr);
+
+        auto end_first = std::chrono::high_resolution_clock::now();
+        if (Options::CFLAliasMeasureAlgorithmRuntime())
+        {
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            end_first - begin_first)
+                            .count();
+            std::cout << "Time passed: " << diff << " ms" << std::endl;
+        }
         yetToBeSolved = false;
         worklist.clear();
-        convertResultsFromLAGraph(std::move(outputs));
+        auto begin_finish = std::chrono::high_resolution_clock::now();
+        if (SVF::Options::MTXCopyBackOnlyStarting())
+        {
+            auto startLabel = SVFToLAGraphNonTerm[graph->getStartKind()];
+            convertResultFromLAGraph(outputs[startLabel],
+                                     graph->getStartKind());
+        }
+        else
+        {
+            convertResultsFromLAGraph(std::move(outputs));
+        }
 
-        // CFLSolver::solve();
+        auto end_finish = std::chrono::high_resolution_clock::now();
+        if (Options::CFLAliasMeasureAlgorithmRuntime())
+        {
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            end_finish - begin_finish)
+                            .count();
+            std::cout << "MTX: for copy back time passed: " << diff << " ms"
+                      << std::endl;
+        }
     }
 };
 
@@ -246,14 +286,10 @@ struct MTXAdvancedSolver : public CFLSolver
     MTXAdvancedSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
-        int i = 0;
-        for (auto&& [node_id, node_ptr] : *graph)
-        {
-            SVFToLAGraphNodes[node_id] = i;
-            LAGraphToSVFNodes[i] = node_id;
-            ++i;
-        }
+        LAGraph_Init(nullptr);
+        setupGraphNodesMaps();
         setupRules();
+        LAGraphRules = initRules();
     }
 
     void insertSymbols(
@@ -290,8 +326,8 @@ struct MTXAdvancedSolver : public CFLSolver
         auto UpdateSymbolMaxIndex = [this](CFGrammar::Symbol sym) {
             if (sym.attribute == 0)
                 return;
-            SymbolKindToMaxAttrVal[sym.kind] =
-                std::max<int>(sym.attribute, SymbolKindToMaxAttrVal[sym.kind]);
+            SVFSymbolKindToMaxAttrVal[sym.kind] = std::max<int>(
+                sym.attribute, SVFSymbolKindToMaxAttrVal[sym.kind]);
         };
 
         CFGrammar::Symbol epsilonTerm = 0;
@@ -353,9 +389,9 @@ struct MTXAdvancedSolver : public CFLSolver
 
         auto StartNonTerm = grammar->getStartKind();
         auto maxVal = 0;
-        if (SymbolKindToMaxAttrVal.count(StartNonTerm) > 0)
+        if (SVFSymbolKindToMaxAttrVal.count(StartNonTerm) > 0)
         {
-            maxVal = SymbolKindToMaxAttrVal.at(StartNonTerm);
+            maxVal = SVFSymbolKindToMaxAttrVal.at(StartNonTerm);
         }
         CFGrammar::Symbol newNonTermSymbol = StartNonTerm;
         for (int i = 0; i != maxVal + 1; ++i)
@@ -366,66 +402,81 @@ struct MTXAdvancedSolver : public CFLSolver
             ++newNonTermSymbol.attribute;
         }
 
-        // TODO Check for max to be the same??
-        bool changed_max_attr = true;
-        while (changed_max_attr)
+        insertSymbols(origTerms, SVFSymbolKindToMaxAttrVal);
+        insertSymbols(origNonTerms, SVFSymbolKindToMaxAttrVal);
+    }
+
+    void normalCheckIndices()
+    {
+        std::vector<std::unordered_set<int>> setsOfSymbolsWithSameMaxes;
+        auto insertOrGetSetWithSymbol = [&setsOfSymbolsWithSameMaxes](
+                                            int kind) {
+            auto setIt =
+                std::find_if(setsOfSymbolsWithSameMaxes.begin(),
+                             setsOfSymbolsWithSameMaxes.end(),
+                             [kind](std::unordered_set<int>& sameAttrSet) {
+                                 return sameAttrSet.count(kind) > 0;
+                             });
+            if (setIt != setsOfSymbolsWithSameMaxes.end())
+                return setIt;
+            setsOfSymbolsWithSameMaxes.push_back(std::unordered_set<int>{kind});
+            return --setsOfSymbolsWithSameMaxes.end();
+        };
+
+        auto handleSymbol = [this, &insertOrGetSetWithSymbol](int nonTermIt,
+                                                              int symbolKind) {
+            auto maxSingleSymbolAttrVal = maxAttrValOrZero(symbolKind);
+            if (maxSingleSymbolAttrVal == 0)
+                return;
+            auto nonTermSetIt = insertOrGetSetWithSymbol(nonTermIt);
+            nonTermSetIt->insert(symbolKind);
+        };
+
+        for (auto nonTermId : origNonTerms)
         {
-            changed_max_attr = false;
+            auto maxAttrVal = maxAttrValOrZero(nonTermId);
+            if (maxAttrVal == 0)
+                continue;
+            (void)insertOrGetSetWithSymbol(nonTermId);
+
+            for (auto& rule : origRules[nonTermId])
+            {
+                assert((rule.size() == 1 || rule.size() == 2) &&
+                       "Unexpected rules size");
+                handleSymbol(nonTermId, rule.front());
+                if (rule.size() == 2)
+                    handleSymbol(nonTermId, rule.back());
+            }
         }
 
-        insertSymbols(origTerms, SymbolKindToMaxAttrVal);
-        insertSymbols(origNonTerms, SymbolKindToMaxAttrVal);
+        auto setHasNonSameMaxAttrVal =
+            [this](std::unordered_set<int>& sameMaxValSet) {
+                assert(sameMaxValSet.size() > 1);
+                auto maxAttrVal =
+                    SVFSymbolKindToMaxAttrVal.at(*sameMaxValSet.begin());
+
+                return std::any_of(sameMaxValSet.begin(), sameMaxValSet.end(),
+                                   [this, maxAttrVal](int kind) {
+                                       return SVFSymbolKindToMaxAttrVal.at(
+                                                  kind) != maxAttrVal;
+                                   });
+            };
+
+        auto mismatchIt = std::find_if(setsOfSymbolsWithSameMaxes.begin(),
+                                       setsOfSymbolsWithSameMaxes.end(),
+                                       setHasNonSameMaxAttrVal);
+        if (mismatchIt != setsOfSymbolsWithSameMaxes.end())
+        {
+            // TODO More gracefull failing
+            assert(false &&
+                   "Group of symbols which must have same max attr val do not");
+        }
     }
 
     void checkIndices()
     {
-        std::unordered_set<Symbol, CFGrammar::SymbolHash> ToHandle;
-        std::unordered_map<Symbol, int, CFGrammar::SymbolHash>
-            SymbolToMaxAttrVal;
-
         std::unordered_set<int> WithZero;
         std::unordered_set<int> WithNonZero;
-
-        std::unordered_map<int, std::unordered_set<int>>
-            IndexedNonTermToIndexedTerms;
-        std::unordered_map<int, int> IndexedSymbolToMaxVal;
-
-        for (auto& [term, indValues] : grammar->getKindToAttrsMap())
-        {
-            auto maxVal = *std::max_element(indValues.begin(), indValues.end());
-            IndexedSymbolToMaxVal.insert({term, maxVal});
-
-            for (auto& rule : grammar->getProdsFromSingleRHS(term))
-            {
-                IndexedNonTermToIndexedTerms[grammar->getLHSSymbol(rule).kind]
-                    .insert(term);
-            }
-            for (auto& rule : grammar->getProdsFromFirstRHS(term))
-            {
-                IndexedNonTermToIndexedTerms[grammar->getLHSSymbol(rule).kind]
-                    .insert(term);
-            }
-            for (auto& rule : grammar->getProdsFromSecondRHS(term))
-            {
-                IndexedNonTermToIndexedTerms[grammar->getLHSSymbol(rule).kind]
-                    .insert(term);
-            }
-        }
-
-        for (auto& [nonTerm, indexedTerms] : IndexedNonTermToIndexedTerms)
-        {
-            auto MaxVal = IndexedSymbolToMaxVal[*indexedTerms.begin()];
-            bool EqualMaxVals =
-                std::all_of(indexedTerms.begin(), indexedTerms.end(),
-                            [&IndexedSymbolToMaxVal, MaxVal](int kind) {
-                                return IndexedSymbolToMaxVal.at(kind) == MaxVal;
-                            });
-
-            assert(EqualMaxVals &&
-                   "Non term with different max values of terminals!!!\n");
-            IndexedSymbolToMaxVal[nonTerm] = MaxVal;
-        }
-
         for (auto& [nonTerm, prodsSet] : grammar->getRawProductions())
         {
             if (nonTerm.variableAttribute)
@@ -445,56 +496,64 @@ struct MTXAdvancedSolver : public CFLSolver
             }
         }
 
-        for (auto&& [nonTerm, prodsSet] : origRules)
+        for (auto& [sym, maxAttrVal] : SVFSymbolKindToMaxAttrVal)
         {
-            if (nonTerm.attribute != 0)
+            auto& singleRhsRulesWithZero = grammar->getProdsFromSingleRHS(sym);
+            for (int i = 1; i < maxAttrVal + 1; ++i)
             {
-                ToHandle.insert(nonTerm.kind);
-            }
-        }
-        for (auto& nonTerm : ToHandle)
-        {
-            auto SymbolToCheck = GrammarBase::Symbol(nonTerm);
-            auto PrevAttrSymbol = GrammarBase::Symbol(nonTerm);
-            auto RefProds = origRules.at(SymbolToCheck);
-            ++SymbolToCheck.attribute;
-            while (origRules.count(SymbolToCheck))
-            {
-                auto ProdsToCheck = origRules[SymbolToCheck];
-                for (auto& prod : ProdsToCheck)
-                {
-                    GrammarBase::Production ProdWithDecrementedAttr;
-                    std::transform(prod.begin(), prod.end(),
-                                   std::back_inserter(ProdWithDecrementedAttr),
-                                   [](const Symbol& sym) {
-                                       auto newSym = sym;
-                                       if (newSym.attribute)
-                                           --newSym.attribute;
-                                       return newSym;
-                                   });
-                    assert(origRules[PrevAttrSymbol].count(
-                               ProdWithDecrementedAttr) > 0 &&
-                           "Must have same rule with one smaller!!\n");
+                Symbol newSymbol = sym;
+                newSymbol.attribute = i;
 
-                    for (auto& sym : prod)
-                    {
-                        if (sym.attribute != 0)
-                        {
-                            if (sym.attribute != SymbolToCheck.attribute)
-                                assert(false &&
-                                       "The attribute values are not equal!!");
-                        }
-                    }
-                    PrevAttrSymbol = SymbolToCheck;
-                    ++SymbolToCheck.attribute;
-                }
+                GrammarBase::Productions prodsWithI;
+                auto singleRhsRulesWithI =
+                    grammar->getProdsFromSingleRHS(newSymbol);
+                auto zeroOutProd = [](const Production& prod) {
+                    Production zeroedProd;
+                    std::transform(
+                        prod.begin(), prod.end(),
+                        std::back_inserter(zeroedProd),
+                        [](Symbol symbol) { return Symbol(symbol.kind); });
+                    return zeroedProd;
+                };
+                std::transform(
+                    singleRhsRulesWithI.begin(), singleRhsRulesWithI.end(),
+                    std::inserter(prodsWithI, prodsWithI.begin()), zeroOutProd);
+                assert(singleRhsRulesWithI == singleRhsRulesWithZero &&
+                       "Non same rules for different indices!");
             }
+
+            auto firstRhsRulesWithZero = grammar->getProdsFromFirstRHS(sym);
+            auto secondRhsRulesWithZero = grammar->getProdsFromSecondRHS(sym);
+        }
+    }
+
+    inline bool pushIntoWorklist(const CFLEdge* item) override
+    {
+        // Will redo the initialization in initialize() anyway.
+        // Just set the flag, that we are not done
+        yetToBeSolved = true;
+
+        return true;
+    }
+    inline bool isWorklistEmpty() override
+    {
+        return !yetToBeSolved;
+    }
+
+    void setupGraphNodesMaps()
+    {
+        int i = 0;
+        for (auto&& [node_id, node_ptr] : *graph)
+        {
+            SVFToLAGraphNodes[node_id] = i;
+            LAGraphToSVFNodes[i] = node_id;
+            ++i;
         }
     }
 
     void convertGraphToLAGraph()
     {
-        LAGraph_Init(nullptr);
+        setupGraphNodesMaps();
 
         // terminal to edge map
         std::unordered_map<int, std::vector<std::pair<int, int>>> adjMat;
@@ -516,9 +575,21 @@ struct MTXAdvancedSolver : public CFLSolver
                    GrB_SUCCESS);
         }
 
+        auto& kindToAttrMap = grammar->getKindToAttrsMap();
         for (auto& edgeIt : graph->getCFLEdges())
         {
             auto SVFSymbol = GrammarBase::Symbol(edgeIt->getEdgeKind());
+
+            // TODO Investigate this?
+            if (origTerms.count(SVFSymbol.kind) && SVFSymbol.attribute > 0)
+            {
+                if (kindToAttrMap.count(SVFSymbol.kind) == 0)
+                    continue;
+                if (kindToAttrMap.at(SVFSymbol.kind)
+                        .count(SVFSymbol.attribute) == 0)
+                    continue;
+            }
+
             int edgeKind = SVFToLAGraphSymbol.at(SVFSymbol);
             if (edgeKind == -1)
                 continue;
@@ -533,8 +604,8 @@ struct MTXAdvancedSolver : public CFLSolver
 
     int maxAttrValOrZero(int kind)
     {
-        if (SymbolKindToMaxAttrVal.count(kind))
-            return SymbolKindToMaxAttrVal.at(kind);
+        if (SVFSymbolKindToMaxAttrVal.count(kind))
+            return SVFSymbolKindToMaxAttrVal.at(kind);
         return 0;
     }
 
@@ -558,9 +629,71 @@ struct MTXAdvancedSolver : public CFLSolver
         return singleRhsTermLAGraph;
     }
 
+    void handleSingleNonTermToSingleNonTerm()
+    {
+        auto newRules = origRules;
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (auto&& [nonTerm, prods] : origRules)
+            {
+                for (auto&& prod : prods)
+                {
+                    if (prod.size() == 2 || origTerms.count(prod.front()) > 0)
+                        continue;
+                    auto& singleNonTerm = prod.front();
+                    std::copy(origRules[singleNonTerm].begin(),
+                              origRules[singleNonTerm].end(),
+                              std::inserter(newRules[nonTerm],
+                                            newRules[nonTerm].begin()));
+                    newRules[nonTerm].erase(prod);
+                    changed = true;
+                }
+            }
+            origRules = newRules;
+        }
+    }
+
+    int handleTermInDoubleProd(std::vector<LAGraph_rule_EWCNF>& rules, int kind,
+                               int LAGraphId)
+    {
+        if (origNonTerms.count(kind))
+            return LAGraphId;
+        if (SVFTermToLAGraphNonTerm.count(kind))
+            return SVFTermToLAGraphNonTerm.at(kind);
+
+        int NewLAGraphNonTermId = symbolsCount;
+
+        auto indexCount = maxAttrValOrZero(kind) + 1;
+        for (int i = 0; i < indexCount; ++i)
+        {
+            Symbol SVFSymbol(kind);
+            SVFSymbol.attribute = i;
+
+            int LAGraphNonTermId = symbolsCount++;
+            LAGraphAddedNonTerms.insert(LAGraphNonTermId);
+            LAGraphToSVFSymbol[LAGraphNonTermId] = SVFSymbol;
+        }
+
+        uint8_t indexedSymbols =
+            indexCount > 1
+                ? (LAGraph_EWNCF_INDEX_NONTERM | LAGraph_EWNCF_INDEX_PROD_A)
+                : 0;
+
+        rules.push_back({.nonterm = NewLAGraphNonTermId,
+                         .prod_A = LAGraphId,
+                         .prod_B = -1,
+                         .indexed_count = static_cast<uint32_t>(indexCount),
+                         .indexed = indexedSymbols});
+        return NewLAGraphNonTermId;
+    }
+
     std::vector<LAGraph_rule_EWCNF> initRules()
     {
         std::vector<LAGraph_rule_EWCNF> rules;
+        handleSingleNonTermToSingleNonTerm();
+
         rules.reserve(origRules.size());
 
         for (auto&& [nonTerm, prods] : origRules)
@@ -580,8 +713,12 @@ struct MTXAdvancedSolver : public CFLSolver
                     getProdInfo(prod[0], true, indexedSymbols, indexedCount);
                 int prodB = -1;
                 if (prod.size() == 2)
+                {
                     prodB = getProdInfo(prod[1], false, indexedSymbols,
                                         indexedCount);
+                    prodA = handleTermInDoubleProd(rules, prod[0], prodA);
+                    prodB = handleTermInDoubleProd(rules, prod[1], prodB);
+                }
 
                 rules.push_back(LAGraph_rule_EWCNF{
                     .nonterm = nonTermLAGraph,
@@ -595,111 +732,44 @@ struct MTXAdvancedSolver : public CFLSolver
         return rules;
     }
 
+    void convertResultFromLAGraph(GrB_Matrix matrix, Symbol label)
+    {
+        GrB_Index nonZeroElems = 0;
+        assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
+               "On matrix nonzero element amount extraction");
+        std::vector<GrB_Index> rowIndices(nonZeroElems);
+        std::vector<GrB_Index> colIndices(nonZeroElems);
+        auto vals = std::make_unique<bool[]>(nonZeroElems);
+        GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
+                                      vals.get(), &nonZeroElems, matrix);
+        for (size_t i = 0; i < nonZeroElems; ++i)
+        {
+            if (!vals[i])
+                continue;
+            auto* SrcNode =
+                graph->getGNode(LAGraphToSVFNodes.at(rowIndices[i]));
+            auto* DstNode =
+                graph->getGNode(LAGraphToSVFNodes.at(colIndices[i]));
+            graph->addCFLEdge(SrcNode, DstNode, label);
+        }
+    }
+
     void convertResultsFromLAGraph(const std::vector<GrB_Matrix>& outputs)
     {
         for (int LAGraphSymbolId = 0, endI = outputs.size();
              LAGraphSymbolId != endI; ++LAGraphSymbolId)
         {
             auto SVFSymbol = LAGraphToSVFSymbol.at(LAGraphSymbolId);
-            // if (origTerms.count(SVFSymbol.kind))
-            //     continue;
-
+            if (origTerms.count(SVFSymbol.kind))
+                continue;
             auto matrix = outputs[LAGraphSymbolId];
-            for (size_t i = 0; i != nodeNum; ++i)
-            {
-                for (size_t j = 0; j != nodeNum; ++j)
-                {
-                    bool x = false;
-                    auto ret_val =
-                        GrB_Matrix_extractElement_BOOL(&x, matrix, i, j);
-                    assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
-                    if (x)
-                    {
-                        auto* SrcNode =
-                            graph->getGNode(LAGraphToSVFNodes.at(i));
-                        auto* DstNode =
-                            graph->getGNode(LAGraphToSVFNodes.at(j));
-                        graph->addCFLEdge(SrcNode, DstNode, SVFSymbol);
-                        // std::cout << "Got from " << SrcNode->getId() << " to
-                        // "
-                        //           << DstNode->getId() << " symbol "
-                        //           << grammar->kindToStr(SVFSymbol.kind)
-                        //           << " which was " << LAGraphSymbolId <<
-                        //           "\n";
-                    }
-                }
-            }
-        }
-    }
-
-    static void playground()
-    {
-        std::vector<GrB_Matrix> adjMatricesHolder;
-        std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
-            testInput;
-        int symbols_count = 5;
-        int nodeNum = 3;
-
-        adjMatricesHolder.resize(symbols_count);
-        for (int i = 0; i != int(symbols_count); ++i)
-        {
-            testInput.push_back(
-                std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>{
-                    &adjMatricesHolder[i], GrB_Matrix_free});
-            GrB_Matrix* curTermMatrix = testInput[i].get();
-            assert(GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum) ==
-                   GrB_SUCCESS);
-        }
-        assert(GrB_Matrix_setElement_BOOL(*(testInput[0].get()), true, 0, 1) ==
-               GrB_SUCCESS);
-        assert(GrB_Matrix_setElement_BOOL(*(testInput[2].get()), true, 1, 2) ==
-               GrB_SUCCESS);
-
-        std::vector<GrB_Matrix> inputs(testInput.size());
-        std::transform(testInput.begin(), testInput.end(), inputs.begin(),
-                       [](const auto& uniq_ptr) { return *uniq_ptr; });
-
-        std::vector<GrB_Matrix> outputs(symbols_count);
-        std::transform(outputs.begin(), outputs.end(), outputs.begin(),
-                       [nodeNum](GrB_Matrix mat) {
-                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
-                           return mat;
-                       });
-        std::vector<LAGraph_rule_EWCNF> rules;
-        rules.push_back({
-            .nonterm = 3,
-            .prod_A = 0,
-            .prod_B = 1,
-            .indexed_count = 2,
-            .indexed = LAGraph_EWNCF_INDEX_NONTERM | LAGraph_EWNCF_INDEX_PROD_B,
-        });
-
-        LAGraph_CFL_reachability_adv(outputs.data(), inputs.data(),
-                                     symbols_count, rules.data(), rules.size(),
-                                     nullptr, 0);
-        for (int LAGraphSymbolId = 0, endI = outputs.size();
-             LAGraphSymbolId != endI; ++LAGraphSymbolId)
-        {
-            auto matrix = outputs[LAGraphSymbolId];
-            for (int i = 0; i != nodeNum; ++i)
-            {
-                for (int j = 0; j != nodeNum; ++j)
-                {
-                    bool x = false;
-                    auto ret_val =
-                        GrB_Matrix_extractElement_BOOL(&x, matrix, i, j);
-                    std::cout << "Got from " << i << " to " << j << " val " << x << std::endl;
-                    assert(ret_val == GrB_SUCCESS || ret_val == GrB_NO_VALUE);
-                }
-            }
+            convertResultFromLAGraph(matrix, SVFSymbol);
         }
     }
 
     void solve() override
     {
         convertGraphToLAGraph();
-        playground();
-        yetToBeSolved = true;
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
@@ -709,16 +779,31 @@ struct MTXAdvancedSolver : public CFLSolver
                            GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
                            return mat;
                        });
-        convertResultsFromLAGraph(inputs);
-        std::cout << "Finish !!!!!" << std::endl;
-        auto rules = initRules();
 
-        LAGraph_CFL_reachability_adv(outputs.data(), inputs.data(),
-                                     symbolsCount, rules.data(), rules.size(),
-                                     nullptr, 0);
+        auto begin_first = std::chrono::high_resolution_clock::now();
+        LAGraph_CFL_reachability_adv(
+            outputs.data(), inputs.data(), symbolsCount, LAGraphRules.data(),
+            LAGraphRules.size(), nullptr, 1 | 2 | 4 | 8);
+        auto end_first = std::chrono::high_resolution_clock::now();
+        if (Options::CFLAliasMeasureAlgorithmRuntime())
+        {
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            end_first - begin_first)
+                            .count();
+            std::cout << "Time passed: " << diff << " ms" << std::endl;
+        }
         yetToBeSolved = false;
         worklist.clear();
-        convertResultsFromLAGraph(std::move(outputs));
+        if (SVF::Options::MTXCopyBackOnlyStarting())
+        {
+            auto startLabel = SVFToLAGraphSymbol[graph->getStartKind()];
+            convertResultFromLAGraph(outputs[startLabel],
+                                     graph->getStartKind());
+        }
+        else
+        {
+            convertResultsFromLAGraph(std::move(outputs));
+        }
     }
 
 private:
@@ -731,15 +816,21 @@ private:
     std::unordered_map<int, GrammarBase::Symbol> LAGraphToSVFSymbol;
     std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
         SVFToLAGraphSymbol;
+    std::unordered_map<GrammarBase::Symbol, int, CFGrammar::SymbolHash>
+        SVFTermToLAGraphNonTerm;
+    std::unordered_set<GrammarBase::Symbol, CFGrammar::SymbolHash>
+        LAGraphAddedNonTerms;
+
     std::unordered_set<int> origTerms;
     std::unordered_set<int> origNonTerms;
     std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions,
                        CFGrammar::SymbolHash>
         origRules;
-    std::unordered_map<int, int> SymbolKindToMaxAttrVal;
+    std::unordered_map<int, int> SVFSymbolKindToMaxAttrVal;
     std::vector<GrB_Matrix> adjMatricesHolder;
     std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
         adjMatrices;
+    std::vector<LAGraph_rule_EWCNF> LAGraphRules;
 };
 
 /// Solver Utilize CFLData

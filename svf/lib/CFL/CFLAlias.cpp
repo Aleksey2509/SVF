@@ -28,6 +28,7 @@
  */
 
 #include "CFL/CFLAlias.h"
+#include <chrono>
 using namespace SVF;
 using namespace SVFUtil;
 
@@ -201,6 +202,19 @@ void CFLAlias::initialize()
     // Normalize CFL Grammar
     normalizeCFLGrammar();
 
+    if (Options::CFLPrintFullGraphs())
+    {
+        std::cout << "\n\n========================\nAT START:\n";
+        for (auto&& it : graph->getCFLEdges())
+        {
+            auto y = it->getEdgeKind();
+            auto kind_str = grammar->kindToStr(y);
+            std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
+                      << " " << "num " << y << "str: " << kind_str << " "
+                      << it->getEdgeAttri() << std::endl;
+        }
+    }
+
     // Initialize solver
     initializeSolver();
 }
@@ -241,13 +255,65 @@ void CFLAlias::solve()
     // Start solving
     double start = stat->getClk(true);
 
+    auto begin_first = std::chrono::high_resolution_clock::now();
     solver->solve();
+    auto end_first = std::chrono::high_resolution_clock::now();
+    if (Options::CFLMeasureFullRuntime())
+    {
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end_first - begin_first).count();
+        std::cout << "Time passed: " << diff << " ms" << std::endl;
+    }
+    if (Options::CFLPrintFullGraphs())
+    {
+        std::cout << "\n\n===First solve======\n";
+        for (auto&& it : graph->getCFLEdges())
+        {
+            auto y = it->getEdgeKind();
+            auto kind_str = grammar->kindToStr(y);
+            std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
+                      << " " << "num " << y << "str: " << kind_str << " "
+                      << it->getEdgeAttri() << "\n";
+        }
+    }
     if (Options::CFLGraph().empty())
     {
         while (updateCallGraph(svfir->getIndirectCallsites()))
         {
             numOfIteration++;
+            if (Options::CFLPrintFullGraphs())
+            {
+                std::cout << "\n\n======BEFORE==========\n";
+                for (auto&& it : graph->getCFLEdges())
+                {
+                    auto y = it->getEdgeKind();
+                    auto kind_str = grammar->kindToStr(y);
+                    std::cout << "from " << it->getSrcID() << " to "
+                              << it->getDstID() << " " << "num " << y
+                              << "str: " << kind_str << " "
+                              << it->getEdgeAttri() << "\n";
+                }
+            }
+            auto begin_timer = std::chrono::high_resolution_clock::now();
             solver->solve();
+            auto end_timer = std::chrono::high_resolution_clock::now();
+            if (Options::CFLMeasureFullRuntime())
+            {
+                auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end_timer - begin_timer).count();
+                std::cout << "Time passed: " << diff << " ms" << std::endl;
+            }
+            if (Options::CFLPrintFullGraphs())
+            {
+                std::cout << "\n\n======AFTER==========\n";
+                for (auto&& it : graph->getCFLEdges())
+                {
+                    auto y = it->getEdgeKind();
+                    auto kind_str = grammar->kindToStr(y);
+                    std::cout << "from " << it->getSrcID() << " to "
+                              << it->getDstID() << " " << "num " << y
+                              << "str: " << kind_str << " "
+                              << it->getEdgeAttri() << "\n";
+                }
+            }
         }
     } // Only cflgraph built from bc could reanalyze by update call graph
 

@@ -27,7 +27,7 @@
  *      Author: Pei Xu
  */
 
-
+#include <chrono>
 #include "CFL/CFLBase.h"
 
 namespace SVF
@@ -120,7 +120,38 @@ void CFLBase::solve()
     // Start solving
     double start = stat->getClk(true);
 
+    if (Options::CFLPrintFullGraphs())
+    {
+        std::cout << "\n\n========================\nAT START:\n";
+        for (auto&& it : graph->getCFLEdges())
+        {
+            auto y = it->getEdgeKind();
+            auto kind_str = grammar->kindToStr(y);
+            std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
+                      << " " << "num " << y << "str: " << kind_str << " "
+                      << it->getEdgeAttri() << "\n";
+        }
+    }
+    auto timer_begin = std::chrono::high_resolution_clock::now();
     solver->solve();
+    auto timer_end = std::chrono::high_resolution_clock::now();
+    if (Options::CFLMeasureFullRuntime())
+    {
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(timer_end - timer_begin).count();
+        std::cout << "Time passed: " << diff << " ms" << std::endl;
+    }
+    if (Options::CFLPrintFullGraphs())
+    {
+        std::cout << "\n\n===First solve======\n";
+        for (auto&& it : graph->getCFLEdges())
+        {
+            auto y = it->getEdgeKind();
+            auto kind_str = grammar->kindToStr(y);
+            std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
+                      << " " << "num " << y << "str: " << kind_str << " "
+                      << it->getEdgeAttri() << "\n";
+        }
+    }
 
     double end = stat->getClk(true);
     timeOfSolving += (end - start) / TIMEINTERVAL;

@@ -751,6 +751,34 @@ const Option<bool> Options::CFLSVFG(
     false
 );
 
+const Option<bool> Options::CFLPrintFullGraphs
+(
+    "cfl-alias-print-graph",
+    "When explicit to true, full CFL graph will be printed",
+    false
+);
+
+const Option<bool> Options::CFLMeasureFullRuntime
+(
+    "cfl-alias-measure-runtime",
+    "When explicit to true, the full runtime of the CFLSolver will be measured and printed",
+    false
+);
+
+const Option<bool> Options::CFLAliasMeasureAlgorithmRuntime
+(
+    "cfl-alias-measure-algo-runtime",
+    "When explicit to true, the runtime of just the CFLSolver algorithm will be measured and printed",
+    false
+);
+
+const Option<bool> Options::MTXCopyBackOnlyStarting
+(
+    "mtx-only-starting",
+    "When explicit to true, only the edges corresponding to starting nonterminal will be extracted from artefacts of matrix algorithm",
+    true
+);
+
 const Option<bool> Options::MTXAlias
 (
     "mtx-alias",
