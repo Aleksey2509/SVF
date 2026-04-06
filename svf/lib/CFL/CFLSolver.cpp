@@ -30,6 +30,7 @@
 #include "CFL/CFLSolver.h"
 #include "CFL/CFGrammar.h"
 #include <algorithm>
+#include <chrono>
 
 using namespace SVF;
 
@@ -117,17 +118,26 @@ void CFLSolver::processCFLEdge(const CFLEdge* Y_edge)
         }
 }
 
-
 void CFLSolver::solve()
 {
     /// initial worklist
     initialize();
 
-    while(!isWorklistEmpty())
+    auto begin_first = std::chrono::high_resolution_clock::now();
+    while (!isWorklistEmpty())
     {
         /// Select and remove an edge Y(i,j) from worklist
         const CFLEdge* Y_edge = popFromWorklist();
         processCFLEdge(Y_edge);
+    }
+
+    auto end_first = std::chrono::high_resolution_clock::now();
+    if (Options::CFLAliasMeasureAlgorithmRuntime())
+    {
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        end_first - begin_first)
+                        .count();
+        std::cout << "Time passed: " << diff << " ms" << std::endl;
     }
 }
 
@@ -406,6 +416,27 @@ void MTXSolver::convertGraphToLAGraph()
     }
 }
 
+void MTXSolver::convertResultFromLAGraph(GrB_Matrix matrix, Symbol label)
+{
+    GrB_Index nonZeroElems = 0;
+
+    assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
+           "On matrix nonzero element amount extraction");
+    std::vector<GrB_Index> rowIndices(nonZeroElems);
+    std::vector<GrB_Index> colIndices(nonZeroElems);
+    auto vals = std::make_unique<bool[]>(nonZeroElems);
+    GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
+                                  vals.get(), &nonZeroElems, matrix);
+    for (size_t i = 0; i < nonZeroElems; ++i)
+    {
+        if (!vals[i])
+            continue;
+        auto* SrcNode = graph->getGNode(LAGraphToSVFNodes[rowIndices[i]]);
+        auto* DstNode = graph->getGNode(LAGraphToSVFNodes[colIndices[i]]);
+        graph->addCFLEdge(SrcNode, DstNode, label);
+    }
+}
+
 void MTXSolver::convertResultsFromLAGraph(
     const std::vector<GrB_Matrix>& outputs)
 {
@@ -417,24 +448,7 @@ void MTXSolver::convertResultsFromLAGraph(
 
         auto Label = LAGraphToSVFNonTerm[LAGraphNonTermId];
         auto matrix = outputs[LAGraphNonTermId];
-        GrB_Index nonZeroElems = 0;
-        assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
-               "On matrix nonzero element amount extraction");
-        std::vector<GrB_Index> rowIndices(nonZeroElems);
-        std::vector<GrB_Index> colIndices(nonZeroElems);
-        auto vals = std::make_unique<bool[]>(nonZeroElems);
-        GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
-                                      vals.get(), &nonZeroElems, matrix);
-        for (size_t i = 0; i < nonZeroElems; ++i)
-        {
-            if (!vals[i])
-                continue;
-            auto* SrcNode =
-                graph->getGNode(LAGraphToSVFNodes.at(rowIndices[i]));
-            auto* DstNode =
-                graph->getGNode(LAGraphToSVFNodes.at(colIndices[i]));
-            graph->addCFLEdge(SrcNode, DstNode, Label);
-        }
+        convertResultFromLAGraph(matrix, Label);
     }
 }
 
