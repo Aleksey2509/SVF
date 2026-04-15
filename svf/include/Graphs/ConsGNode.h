@@ -60,6 +60,12 @@ private:
     ConstraintEdge::ConstraintEdgeSetTy copyInEdges;
     ConstraintEdge::ConstraintEdgeSetTy copyOutEdges;
 
+    ConstraintEdge::ConstraintEdgeSetTy callInEdges;
+    ConstraintEdge::ConstraintEdgeSetTy callOutEdges;
+
+    ConstraintEdge::ConstraintEdgeSetTy retInEdges;
+    ConstraintEdge::ConstraintEdgeSetTy retOutEdges;
+
     ConstraintEdge::ConstraintEdgeSetTy gepInEdges;
     ConstraintEdge::ConstraintEdgeSetTy gepOutEdges;
 
@@ -229,6 +235,16 @@ public:
         addIncomingDirectEdge(inEdge);
         copyInEdges.insert(inEdge);
     }
+    inline void addIncomingCallEdge(CallCGEdge *inEdge)
+    {
+        addIncomingDirectEdge(inEdge);
+        callInEdges.insert(inEdge);
+    }
+    inline void addIncomingRetEdge(RetCGEdge *inEdge)
+    {
+        addIncomingDirectEdge(inEdge);
+        retInEdges.insert(inEdge);
+    }
     inline void addIncomingGepEdge(GepCGEdge* inEdge)
     {
         addIncomingDirectEdge(inEdge);
@@ -238,6 +254,16 @@ public:
     {
         addOutgoingDirectEdge(outEdge);
         copyOutEdges.insert(outEdge);
+    }
+    inline void addOutgoingCallEdge(CallCGEdge *inEdge)
+    {
+        addOutgoingDirectEdge(inEdge);
+        callOutEdges.insert(inEdge);
+    }
+    inline void addOutgoingRetEdge(RetCGEdge *inEdge)
+    {
+        addOutgoingDirectEdge(inEdge);
+        retOutEdges.insert(inEdge);
     }
     inline void addOutgoingGepEdge(GepCGEdge* outEdge)
     {

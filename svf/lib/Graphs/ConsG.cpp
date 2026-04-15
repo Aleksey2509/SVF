@@ -88,9 +88,15 @@ void ConstraintGraph::buildCG()
     for (SVFStmt::SVFStmtSetTy::iterator iter = calls.begin(), eiter =
                 calls.end(); iter != eiter; ++iter)
     {
-        const CallPE* callPE = SVFUtil::cast<CallPE>(*iter);
-        for(u32_t i = 0; i < callPE->getOpVarNum(); i++)
-            addCopyCGEdge(callPE->getOpVarID(i), callPE->getResID());
+        const CallPE* edge = SVFUtil::cast<CallPE>(*iter);
+
+        // TODO Add correct function id;
+        auto callerId = edge->getCallSite()->getFun()->getId();
+        for (u32_t i = 0; i < edge->getOpVarNum(); ++i)
+        {
+            addCopyCGEdge(edge->getOpVarID(i), edge->getResID());
+            // addCallCGEdge(edge->getOpVarID(i), edge->getResID(), callerId);
+        }
     }
 
     SVFStmt::SVFStmtSetTy& rets = getSVFStmtSet(SVFStmt::Ret);
@@ -98,7 +104,11 @@ void ConstraintGraph::buildCG()
                 rets.end(); iter != eiter; ++iter)
     {
         const RetPE* edge = SVFUtil::cast<RetPE>(*iter);
-        addCopyCGEdge(edge->getRHSVarID(),edge->getLHSVarID());
+
+        // TODO Add correct function id;
+        auto callerId = edge->getCallSite()->getFun()->getId();
+        addCopyCGEdge(edge->getRHSVarID(), edge->getLHSVarID());
+        // addRetCGEdge(edge->getRHSVarID(), edge->getLHSVarID(), callerId);
     }
 
     SVFStmt::SVFStmtSetTy& tdfks = getSVFStmtSet(SVFStmt::ThreadFork);
@@ -242,6 +252,45 @@ CopyCGEdge* ConstraintGraph::addCopyCGEdge(NodeID src, NodeID dst)
     return edge;
 }
 
+CallCGEdge* ConstraintGraph::addCallCGEdge(NodeID src, NodeID dst,
+                                           NodeID callerId)
+{
+
+    ConstraintNode* srcNode = getConstraintNode(src);
+    ConstraintNode* dstNode = getConstraintNode(dst);
+    if (hasEdge(srcNode, dstNode, ConstraintEdge::Call) || srcNode == dstNode)
+        return nullptr;
+
+    CallCGEdge* edge = new CallCGEdge(srcNode, dstNode, edgeIndex++, callerId);
+
+    bool inserted = directEdgeSet.insert(edge).second;
+    (void)inserted; // Suppress warning of unused variable under release build
+    assert(inserted && "new CallCGEdge not added??");
+
+    srcNode->addOutgoingCallEdge(edge);
+    dstNode->addIncomingCallEdge(edge);
+    return edge;
+}
+
+RetCGEdge* ConstraintGraph::addRetCGEdge(NodeID src, NodeID dst,
+                                         NodeID callerId)
+{
+
+    ConstraintNode* srcNode = getConstraintNode(src);
+    ConstraintNode* dstNode = getConstraintNode(dst);
+    if (hasEdge(srcNode, dstNode, ConstraintEdge::Ret) || srcNode == dstNode)
+        return nullptr;
+
+    RetCGEdge* edge = new RetCGEdge(srcNode, dstNode, edgeIndex++, callerId);
+
+    bool inserted = directEdgeSet.insert(edge).second;
+    (void)inserted; // Suppress warning of unused variable under release build
+    assert(inserted && "new RetCGEdge not added??");
+
+    srcNode->addOutgoingRetEdge(edge);
+    dstNode->addIncomingRetEdge(edge);
+    return edge;
+}
 
 /*!
  * Add Gep edge

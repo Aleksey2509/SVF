@@ -53,7 +53,14 @@ public:
     /// Gep edge is used for field sensitivity
     enum ConstraintEdgeK
     {
-        Addr, Copy, Store, Load, NormalGep, VariantGep
+        Addr,
+        Copy,
+        Store,
+        Load,
+        NormalGep,
+        VariantGep,
+        Call,
+        Ret
     };
 private:
     EdgeID edgeId;

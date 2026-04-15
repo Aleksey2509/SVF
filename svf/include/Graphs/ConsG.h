@@ -124,9 +124,10 @@ public:
     //// Return true if this edge exits
     inline bool hasEdge(ConstraintNode* src, ConstraintNode* dst, ConstraintEdge::ConstraintEdgeK kind)
     {
-        ConstraintEdge edge(src,dst,kind);
-        if(kind == ConstraintEdge::Copy ||
-                kind == ConstraintEdge::NormalGep || kind == ConstraintEdge::VariantGep)
+        ConstraintEdge edge(src, dst, kind);
+        if (kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep ||
+            kind == ConstraintEdge::VariantGep ||
+            kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
             return directEdgeSet.find(&edge) != directEdgeSet.end();
         else if(kind == ConstraintEdge::Addr)
             return AddrCGEdgeSet.find(&edge) != AddrCGEdgeSet.end();
@@ -170,14 +171,19 @@ public:
         }
     }
 
-    ///Add a SVFIR edge into Edge map
+    /// Add a SVFIR edge into Edge map
     //@{
     /// Add Address edge
     AddrCGEdge* addAddrCGEdge(NodeID src, NodeID dst);
     /// Add Copy edge
     CopyCGEdge* addCopyCGEdge(NodeID src, NodeID dst);
+    /// Add Calless edge
+    CallCGEdge* addCallCGEdge(NodeID src, NodeID dst, NodeID callerID);
+    /// Add Ret edge
+    RetCGEdge* addRetCGEdge(NodeID src, NodeID dst, NodeID callerID);
     /// Add Gep edge
-    NormalGepCGEdge* addNormalGepCGEdge(NodeID src, NodeID dst, const AccessPath& ap);
+    NormalGepCGEdge* addNormalGepCGEdge(NodeID src, NodeID dst,
+                                        const AccessPath& ap);
     VariantGepCGEdge* addVariantGepCGEdge(NodeID src, NodeID dst);
     /// Add Load edge
     LoadCGEdge* addLoadCGEdge(NodeID src, NodeID dst);

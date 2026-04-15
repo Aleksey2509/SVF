@@ -1,7 +1,7 @@
 Start:
    V
 Terminal:
-   addr copy store load gep vgep
+   addr copy store load gep vgep call ret
 Productions:
    F -> epsilon | F Copynonterm | addr Memflow | F store V load | store Memflow load | F F;
    Fbar -> epsilon | Copynontermbar Fbar | Memflowbar addrbar | loadbar V storebar Fbar | loadbar Memflowbar storebar;
