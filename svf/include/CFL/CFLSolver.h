@@ -31,6 +31,7 @@
 #define INCLUDE_CFL_CFLSolver_H_
 
 #include "CFL/CFGrammar.h"
+#include "CFL/CFLInterDyckSolver.h"
 #include "GraphBLAS.h"
 #include "Graphs/CFLGraph.h"
 #include "LAGraphX.h"
@@ -119,7 +120,7 @@ protected:
 struct MTXSolver : public CFLSolver
 {
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
-        : CFLSolver(_graph, _grammar)
+        : CFLSolver(_graph, _grammar), dyckSolver(_graph, _grammar)
     {
         LAGraph_Init(nullptr);
         setupNonTermMaps();
@@ -148,6 +149,7 @@ struct MTXSolver : public CFLSolver
     std::vector<GrB_Matrix> adjMatricesHolder;
     std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
         adjMatrices;
+    CFLInterDyckSolver dyckSolver;
 
     int termsCount{};
     int nonTermsCount{};
@@ -220,6 +222,7 @@ struct MTXSolver : public CFLSolver
     }
     void solve() override
     {
+        dyckSolver.convertGraphToInterleavedDyckGraph();
         auto begin_init = std::chrono::high_resolution_clock::now();
         initialize();
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
