@@ -81,10 +81,9 @@ public:
     /// ClassOf
     static inline bool classof(const GenericConsEdgeTy *edge)
     {
-        return edge->getEdgeKind() == Addr ||
-               edge->getEdgeKind() == Copy ||
-               edge->getEdgeKind() == Store ||
-               edge->getEdgeKind() == Load ||
+        return edge->getEdgeKind() == Addr || edge->getEdgeKind() == Copy ||
+               edge->getEdgeKind() == Store || edge->getEdgeKind() == Load ||
+               edge->getEdgeKind() == Call || edge->getEdgeKind() == Ret ||
                edge->getEdgeKind() == NormalGep ||
                edge->getEdgeKind() == VariantGep;
     }
@@ -157,6 +156,76 @@ public:
     }
 };
 
+class CallCGEdge : public ConstraintEdge
+{
+private:
+    NodeID CallerID;
+    CallCGEdge();                      ///< place holder
+    CallCGEdge(const CallCGEdge&);     ///< place holder
+    void operator=(const CallCGEdge&); ///< place holder
+
+public:
+    /// Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const CallCGEdge*)
+    {
+        return true;
+    }
+    static inline bool classof(const ConstraintEdge* edge)
+    {
+        return edge->getEdgeKind() == Call;
+    }
+    static inline bool classof(const GenericConsEdgeTy* edge)
+    {
+        return edge->getEdgeKind() == Call;
+    }
+    NodeID getCallerID() const
+    {
+        return CallerID;
+    }
+
+    /// constructor
+    CallCGEdge(ConstraintNode* s, ConstraintNode* d, EdgeID id, NodeID CallerId)
+        : ConstraintEdge(s, d, Call, id), CallerID(CallerId)
+    {
+    }
+};
+
+class RetCGEdge : public ConstraintEdge
+{
+private:
+    NodeID CallerID;
+    RetCGEdge();                      ///< place holder
+    RetCGEdge(const RetCGEdge&);      ///< place holder
+    void operator=(const RetCGEdge&); ///< place holder
+
+public:
+    /// Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const RetCGEdge*)
+    {
+        return true;
+    }
+    static inline bool classof(const ConstraintEdge* edge)
+    {
+        return edge->getEdgeKind() == Ret;
+    }
+    static inline bool classof(const GenericConsEdgeTy* edge)
+    {
+        return edge->getEdgeKind() == Ret;
+    }
+    NodeID getCallerID() const
+    {
+        return CallerID;
+    }
+    //@}
+
+    /// constructor
+    RetCGEdge(ConstraintNode* s, ConstraintNode* d, EdgeID id, NodeID CallerId)
+        : ConstraintEdge(s, d, Ret, id), CallerID(CallerId)
+    {
+    }
+};
 
 /*!
  * Store edge

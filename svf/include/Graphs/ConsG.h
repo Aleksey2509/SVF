@@ -125,6 +125,7 @@ public:
     inline bool hasEdge(ConstraintNode* src, ConstraintNode* dst, ConstraintEdge::ConstraintEdgeK kind)
     {
         ConstraintEdge edge(src, dst, kind);
+        // TODO Maybe separate for Call/Ret?
         if (kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep ||
             kind == ConstraintEdge::VariantGep ||
             kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
@@ -143,8 +144,11 @@ public:
     /// Get an edge via its src and dst nodes and kind
     inline ConstraintEdge* getEdge(ConstraintNode* src, ConstraintNode* dst, ConstraintEdge::ConstraintEdgeK kind)
     {
-        ConstraintEdge edge(src,dst,kind);
-        if(kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep || kind == ConstraintEdge::VariantGep)
+        ConstraintEdge edge(src, dst, kind);
+        // TODO Maybe separate for Call/Ret?
+        if (kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep ||
+            kind == ConstraintEdge::VariantGep ||
+            kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
         {
             auto eit = directEdgeSet.find(&edge);
             return *eit;

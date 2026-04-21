@@ -42,6 +42,7 @@ using namespace SVFUtil;
 void ConstraintGraph::buildCG()
 {
 
+    std::unordered_map<const CallICFGNode*, int> callSiteToId;
     // initialize nodes
     for(SVFIR::iterator it = pag->begin(), eit = pag->end(); it!=eit; ++it)
     {
@@ -85,30 +86,36 @@ void ConstraintGraph::buildCG()
     }
 
     SVFStmt::SVFStmtSetTy& calls = getSVFStmtSet(SVFStmt::Call);
-    for (SVFStmt::SVFStmtSetTy::iterator iter = calls.begin(), eiter =
-                calls.end(); iter != eiter; ++iter)
     {
-        const CallPE* edge = SVFUtil::cast<CallPE>(*iter);
-
-        // TODO Add correct function id;
-        auto callerId = edge->getCallSite()->getFun()->getId();
+        auto& allCalls = pag->getSVFStmtSet(SVFStmt::Call);
+        calls.insert(allCalls.begin(), allCalls.end());
+    }
+    for (auto* statement : calls)
+    {
+        const CallPE* edge = SVFUtil::cast<CallPE>(statement);
+        auto [it, insertedFlag] =
+            callSiteToId.insert({edge->getCallSite(), callSiteToId.size()});
+        auto callerId = it->second;
         for (u32_t i = 0; i < edge->getOpVarNum(); ++i)
         {
             addCopyCGEdge(edge->getOpVarID(i), edge->getResID());
-            // addCallCGEdge(edge->getOpVarID(i), edge->getResID(), callerId);
+            addCallCGEdge(edge->getOpVarID(i), edge->getResID(), callerId);
         }
     }
 
     SVFStmt::SVFStmtSetTy& rets = getSVFStmtSet(SVFStmt::Ret);
-    for (SVFStmt::SVFStmtSetTy::iterator iter = rets.begin(), eiter =
-                rets.end(); iter != eiter; ++iter)
     {
-        const RetPE* edge = SVFUtil::cast<RetPE>(*iter);
-
-        // TODO Add correct function id;
-        auto callerId = edge->getCallSite()->getFun()->getId();
+        auto& allRets = pag->getSVFStmtSet(SVFStmt::Ret);
+        rets.insert(allRets.begin(), allRets.end());
+    }
+    for (auto* statement : rets)
+    {
+        const RetPE* edge = SVFUtil::cast<RetPE>(statement);
+        auto [it, insertedFlag] =
+            callSiteToId.insert({edge->getCallSite(), callSiteToId.size()});
+        auto callerId = it->second;
         addCopyCGEdge(edge->getRHSVarID(), edge->getLHSVarID());
-        // addRetCGEdge(edge->getRHSVarID(), edge->getLHSVarID(), callerId);
+        addRetCGEdge(edge->getRHSVarID(), edge->getLHSVarID(), callerId);
     }
 
     SVFStmt::SVFStmtSetTy& tdfks = getSVFStmtSet(SVFStmt::ThreadFork);
@@ -911,6 +918,14 @@ struct DOTGraphTraits<ConstraintGraph*> : public DOTGraphTraits<SVFIR*>
         else if (edge->getEdgeKind() == ConstraintEdge::Load)
         {
             return "color=red";
+        }
+        else if (edge->getEdgeKind() == ConstraintEdge::Call)
+        {
+            return "color=orange";
+        }
+        else if (edge->getEdgeKind() == ConstraintEdge::Ret)
+        {
+            return "color=gray";
         }
         else
         {

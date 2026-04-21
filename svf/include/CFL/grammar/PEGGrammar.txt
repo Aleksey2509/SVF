@@ -1,7 +1,7 @@
-Start:  
+Start:
    V
 Terminal:
-   addr copy store load gep
+   addr copy store load gep vgep call ret
 Productions:
    F -> ( copy M ? ) *;
    Fbar -> ( M ? copybar ) *;

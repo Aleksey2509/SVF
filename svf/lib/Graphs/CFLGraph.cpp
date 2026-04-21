@@ -145,6 +145,14 @@ struct DOTGraphTraits<CFLGraph*> : public DefaultDOTGraphTraits
         {
             rawstr << "color=red";
         }
+        else if (edge->getEdgeKind() == ConstraintEdge::Call)
+        {
+            rawstr << "color=orange,label=" << '"' << "Call_" << edge->getEdgeAttri() << '"';
+        }
+        else if (edge->getEdgeKind() == ConstraintEdge::Ret)
+        {
+            rawstr << "color=gray,label=" << '"' << "Ret_" << edge->getEdgeAttri() << '"';
+        }
         else if (edge->getEdgeKind() == graph->getStartKind())
         {
             rawstr << "color=Turquoise";

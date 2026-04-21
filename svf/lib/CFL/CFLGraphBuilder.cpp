@@ -322,6 +322,7 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
 {
     cflGraph = new CFLGraph(startKind);
 
+    std::unordered_map<int, int> callerIdRenumbering;
     buildlabelToKindMap(grammar);
     for(auto it = graph->begin(); it!= graph->end(); it++)
     {
@@ -402,8 +403,7 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
                                      cflGraph->getGNode(CFLDerefNode->getId()),
                                      labelToKindMap[label]);
             }
-            else if (edge->getEdgeKind() == ConstraintEdge::Call ||
-                     edge->getEdgeKind() == ConstraintEdge::Ret)
+            else if (CallCGEdge::classof(edge) || RetCGEdge::classof(edge))
             {
                 CFGrammar::Kind edgeKind = edge->getEdgeKind();
 
@@ -417,9 +417,11 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
                 case ConstraintEdge::Call:
                     callerId =
                         SVFUtil::dyn_cast<CallCGEdge>(edge)->getCallerID();
+                    break;
                 case ConstraintEdge::Ret:
                     callerId =
                         SVFUtil::dyn_cast<RetCGEdge>(edge)->getCallerID();
+                    break;
                 default:
                     assert(false && "unreachable");
                 }
@@ -473,8 +475,11 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
                 }
                 else
                 {
-                    cflGraph->addCFLEdge(cflGraph->getGNode(edge->getSrcID()), cflGraph->getGNode(edge->getDstID()), edgeLabel);
-                    std::string label = kindToLabelMap[edge->getEdgeKind()];
+                    cflGraph->addCFLEdge(cflGraph->getGNode(edge->getSrcID()),
+                                         cflGraph->getGNode(edge->getDstID()),
+                                         edgeLabel);
+                    // std::string label = kindToLabelMap[edge->getEdgeKind()];
+                    std::string label = kindToLabelMap.at(edge->getEdgeKind());
                     label.append("bar");
                     cflGraph->addCFLEdge(cflGraph->getGNode(edge->getDstID()), cflGraph->getGNode(edge->getSrcID()), labelToKindMap[label]);
                 }
