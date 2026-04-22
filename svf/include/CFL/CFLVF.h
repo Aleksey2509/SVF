@@ -52,6 +52,9 @@ public:
     /// Initialize the grammar, graph, solver
     virtual void initialize();
 
+    /// Initialize Solver
+    virtual void initializeSolver();
+
     /// Print grammar and graph
     virtual void finalize();
 
@@ -61,6 +64,20 @@ public:
 private:
     CFLSVFGBuilder memSSA;
     SVFG* svfg;
+};
+
+class MTXVF : public CFLVF
+{
+    MTXVF(SVFIR* ir) : CFLVF(ir) {}
+
+    void initializeSolver() override;
+};
+
+class AdvMTXVF : public CFLVF
+{
+    AdvMTXVF(SVFIR* ir) : CFLVF(ir) {}
+
+    void initializeSolver() override;
 };
 
 } // End namespace SVF

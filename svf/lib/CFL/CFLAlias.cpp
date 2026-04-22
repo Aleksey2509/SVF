@@ -221,18 +221,7 @@ void CFLAlias::initialize()
 
 void CFLAlias::initializeSolver()
 {
-    if (Options::AdvancedMTXAlias() == true)
-    {
-        solver = new MTXAdvancedSolver(graph, grammar);
-    }
-    else if (Options::MTXAlias() == true)
-    {
-        solver = new MTXSolver(graph, grammar);
-    }
-    else
-    {
-        solver = new CFLSolver(graph, grammar);
-    }
+    solver = new CFLSolver(graph, grammar);
 }
 
 void CFLAlias::finalize()
@@ -319,6 +308,16 @@ void CFLAlias::solve()
 
     double end = stat->getClk(true);
     timeOfSolving += (end - start) / TIMEINTERVAL;
+}
+
+void MTXAlias::initializeSolver()
+{
+    solver = new MTXSolver(graph, grammar);
+}
+
+void AdvMTXAlias::initializeSolver()
+{
+    solver = new MTXSolver(graph, grammar);
 }
 
 void POCRAlias::initializeSolver()

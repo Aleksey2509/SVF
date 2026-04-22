@@ -281,9 +281,9 @@ struct MTXSolver : public CFLSolver
     }
 };
 
-struct MTXAdvancedSolver : public CFLSolver
+struct AdvMTXSolver : public CFLSolver
 {
-    MTXAdvancedSolver(CFLGraph* _graph, CFGrammar* _grammar)
+    AdvMTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
         LAGraph_Init(nullptr);

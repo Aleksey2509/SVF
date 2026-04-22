@@ -143,6 +143,24 @@ private:
     CallSite2DummyValPN callsite2DummyValPN;        ///< Map an instruction to a dummy obj which created at an indirect callsite, which invokes a heap allocator
 };
 
+class MTXAlias : public CFLAlias
+{
+public:
+    MTXAlias(SVFIR* ir) : CFLAlias(ir)
+    {
+    }
+    void initializeSolver() override;
+};
+
+class AdvMTXAlias : public CFLAlias
+{
+public:
+    AdvMTXAlias(SVFIR* ir) : CFLAlias(ir)
+    {
+    }
+    void initializeSolver() override;
+};
+
 class POCRAlias : public CFLAlias
 {
 public:
