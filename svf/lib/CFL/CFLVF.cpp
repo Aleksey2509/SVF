@@ -54,6 +54,11 @@ void CFLVF::buildCFLGraph()
     cflChecker.check(grammarBase, &cflGraphBuilder, graph);
 }
 
+void CFLVF::initializeSolver()
+{
+    solver = new CFLSolver(graph, grammar);
+}
+
 void CFLVF::initialize()
 {
     // Parameter Checking
@@ -69,18 +74,7 @@ void CFLVF::initialize()
     normalizeCFLGrammar();
 
     // Initialize solver
-    if (Options::AdvancedMTXAlias() == true)
-    {
-        solver = new MTXAdvancedSolver(graph, grammar);
-    }
-    else if (Options::MTXAlias() == true)
-    {
-        solver = new MTXSolver(graph, grammar);
-    }
-    else
-    {
-        solver = new CFLSolver(graph, grammar);
-    }
+    initializeSolver();
 }
 
 void CFLVF::checkParameter()
@@ -107,4 +101,14 @@ void CFLVF::finalize()
         grammar->dump("Grammar");
         graph->dump("CFLGraph");
     }
+}
+
+void MTXVF::initializeSolver()
+{
+    solver = new MTXSolver(graph, grammar);
+}
+
+void AdvMTXVF::initializeSolver()
+{
+    solver = new AdvMTXSolver(graph, grammar);
 }

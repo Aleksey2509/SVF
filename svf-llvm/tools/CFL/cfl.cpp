@@ -68,6 +68,10 @@ int main(int argc, char ** argv)
         cfl = std::make_unique<POCRHybrid>(svfir);
     else if (Options::POCRAlias())
         cfl = std::make_unique<POCRAlias>(svfir);
+    else if (Options::MTXAlias())
+        cfl = std::make_unique<MTXAlias>(svfir);
+    else if (Options::AdvancedMTXAlias())
+        cfl = std::make_unique<AdvMTXAlias>(svfir);
     else
         cfl = std::make_unique<CFLAlias>(svfir); // if no svfg is specified, we use CFLAlias as the default one.
 
