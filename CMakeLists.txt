@@ -52,12 +52,22 @@ Set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(
     LAGraph
     GIT_REPOSITORY https://github.com/Aleksey2509/LAGraph.git
-    GIT_TAG homka122/CFL_optimizations
+    GIT_TAG homka122_rebase
     GIT_PROGRESS TRUE
 )
 
 # Download and make it available
 FetchContent_MakeAvailable(LAGraph)
+
+
+# TODO Make non local repo
+FetchContent_Declare(
+    cfl-idr-with-la
+    SOURCE_DIR /home/lexotr/master_diploma/reachability/cfl-idr-with-la
+)
+
+# Download and make it available
+FetchContent_MakeAvailable(cfl-idr-with-la)
 
 # Since SVF builds into non-standard directories; symlink/copy compile commands into top-level directory
 if(WIN32

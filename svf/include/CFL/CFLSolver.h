@@ -33,6 +33,7 @@
 #include "CFL/CFGrammar.h"
 #include "Util/GeneralType.h"
 #include "Util/WorkList.h"
+#include "CFL/CFLDyckSolver.h"
 #include "CFL/CFLInterDyckSolver.h"
 #include "GraphBLAS.h"
 #include "Graphs/CFLGraph.h"
@@ -138,12 +139,31 @@ protected:
 struct MTXSolver : public CFLSolver
 {
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
-        : CFLSolver(_graph, _grammar), dyckSolver(_graph, _grammar)
+        : CFLSolver(_graph, _grammar)
     {
         LAGraph_Init(nullptr);
         setupNonTermMaps();
         setupTermMaps();
         convertGrammarToLAGraphRules();
+        auto terminals = grammar->getTerminals();
+        if ((Options::CFLCallSensitivity() ||
+             Options::CFLInterleavedCallSensitivity()) &&
+            (terminals.count("call") != 0) && (terminals.count("ret") != 0))
+        {
+            auto callKind = terminals["call"];
+            auto retKind = terminals["ret"];
+
+            if (Options::CFLCallSensitivity())
+                dyckSolver = std::make_unique<CFLDyckSolver>(_graph, _grammar,
+                                                             callKind, retKind);
+            if (Options::CFLInterleavedCallSensitivity() &&
+                (terminals.count("gep") != 0) &&
+                (terminals.count("gepbar") != 0))
+            {
+                dyckSolver =
+                    std::make_unique<CFLInterDyckSolver>(_graph, _grammar);
+            }
+        }
     }
     std::vector<LAGraph_rule_WCNF> rules;
     std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions,
@@ -167,7 +187,7 @@ struct MTXSolver : public CFLSolver
     std::vector<GrB_Matrix> adjMatricesHolder;
     std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
         adjMatrices;
-    CFLInterDyckSolver dyckSolver;
+    std::unique_ptr<CFLDyckBase> dyckSolver;
 
     int termsCount{};
     int nonTermsCount{};
@@ -240,7 +260,6 @@ struct MTXSolver : public CFLSolver
     }
     void solve() override
     {
-        dyckSolver.convertGraphToInterleavedDyckGraph();
         auto begin_init = std::chrono::high_resolution_clock::now();
         initialize();
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
@@ -254,6 +273,12 @@ struct MTXSolver : public CFLSolver
         for (auto& output : outputs)
             outputOwners.emplace_back(&output, &GrB_Matrix_free);
         auto end_init = std::chrono::high_resolution_clock::now();
+        if (dyckSolver)
+        {
+            dyckSolver->setup(SVFToLAGraphNodes, LAGraphToSVFNodes);
+            dyckSolver->solve();
+        }
+
         if (Options::CFLAliasMeasureAlgorithmRuntime())
         {
             auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(

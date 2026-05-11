@@ -210,7 +210,7 @@ void CFLAlias::initialize()
         for (auto&& it : graph->getCFLEdges())
         {
             auto y = it->getEdgeKind();
-            auto kind_str = grammar->kindToStr(y);
+            auto kind_str = grammar->kindToStr(it->getEdgeKindWithMask());
             std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
                       << " " << "num " << y << "str: " << kind_str << " "
                       << it->getEdgeAttri() << std::endl;
@@ -230,7 +230,7 @@ void CFLAlias::finalize()
 {
     numOfChecks = solver->numOfChecks;
 
-    if(Options::PrintCFL() == true)
+    if (Options::PrintCFL() == true)
     {
         if (Options::CFLGraph().empty())
             svfir->dump("IR");
@@ -251,7 +251,9 @@ void CFLAlias::solve()
     auto end_first = std::chrono::high_resolution_clock::now();
     if (Options::CFLMeasureFullRuntime())
     {
-        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end_first - begin_first).count();
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        end_first - begin_first)
+                        .count();
         std::cout << "Time passed: " << diff << " ms" << std::endl;
     }
     if (Options::CFLPrintFullGraphs())
@@ -260,7 +262,7 @@ void CFLAlias::solve()
         for (auto&& it : graph->getCFLEdges())
         {
             auto y = it->getEdgeKind();
-            auto kind_str = grammar->kindToStr(y);
+            auto kind_str = grammar->kindToStr(it->getEdgeKindWithMask());
             std::cout << "from " << it->getSrcID() << " to " << it->getDstID()
                       << " " << "num " << y << "str: " << kind_str << " "
                       << it->getEdgeAttri() << "\n";
@@ -277,7 +279,8 @@ void CFLAlias::solve()
                 for (auto&& it : graph->getCFLEdges())
                 {
                     auto y = it->getEdgeKind();
-                    auto kind_str = grammar->kindToStr(y);
+                    auto kind_str =
+                        grammar->kindToStr(it->getEdgeKindWithMask());
                     std::cout << "from " << it->getSrcID() << " to "
                               << it->getDstID() << " " << "num " << y
                               << "str: " << kind_str << " "
@@ -289,7 +292,10 @@ void CFLAlias::solve()
             auto end_timer = std::chrono::high_resolution_clock::now();
             if (Options::CFLMeasureFullRuntime())
             {
-                auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end_timer - begin_timer).count();
+                auto diff =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        end_timer - begin_timer)
+                        .count();
                 std::cout << "Time passed: " << diff << " ms" << std::endl;
             }
             if (Options::CFLPrintFullGraphs())
@@ -298,7 +304,8 @@ void CFLAlias::solve()
                 for (auto&& it : graph->getCFLEdges())
                 {
                     auto y = it->getEdgeKind();
-                    auto kind_str = grammar->kindToStr(y);
+                    auto kind_str =
+                        grammar->kindToStr(it->getEdgeKindWithMask());
                     std::cout << "from " << it->getSrcID() << " to "
                               << it->getDstID() << " " << "num " << y
                               << "str: " << kind_str << " "
