@@ -427,12 +427,17 @@ void MTXSolver::convertResultFromLAGraph(GrB_Matrix matrix, Symbol label)
     auto vals = std::make_unique<bool[]>(nonZeroElems);
     GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
                                   vals.get(), &nonZeroElems, matrix);
+    bool dyckSolverPresent = dyckSolver != nullptr;
     for (size_t i = 0; i < nonZeroElems; ++i)
     {
         if (!vals[i])
             continue;
-        auto* SrcNode = graph->getGNode(LAGraphToSVFNodes[rowIndices[i]]);
-        auto* DstNode = graph->getGNode(LAGraphToSVFNodes[colIndices[i]]);
+        auto srcId = LAGraphToSVFNodes[rowIndices[i]];
+        auto dstId = LAGraphToSVFNodes[colIndices[i]];
+        if (dyckSolverPresent && !dyckSolver->isAccessible(srcId, dstId))
+            continue;
+        auto* SrcNode = graph->getGNode(srcId);
+        auto* DstNode = graph->getGNode(dstId);
         graph->addCFLEdge(SrcNode, DstNode, label);
     }
 }

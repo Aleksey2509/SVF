@@ -772,6 +772,20 @@ const Option<bool> Options::CFLAliasMeasureAlgorithmRuntime
     false
 );
 
+const Option<bool> Options::CFLCallSensitivity
+(
+    "cfl-alias-enable-call-sensitivity",
+    "When explicit to true, will additionally do over approximation of call sensitivity",
+    false
+);
+
+const Option<bool> Options::CFLInterleavedCallSensitivity
+(
+    "cfl-alias-enable-call-sensitivity-via-idr",
+    "When explicit to true, will additionally do over approximation of call sensitivity via interleaved dyck reachability",
+    false
+);
+
 const Option<bool> Options::MTXCopyBackOnlyStarting
 (
     "mtx-only-starting",

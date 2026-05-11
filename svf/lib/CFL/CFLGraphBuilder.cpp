@@ -277,12 +277,40 @@ CFLGraph* CFLGraphBuilder::buildFromJson(std::string fileName, GrammarBase *gram
     return cflGraph;
 }
 
-CFLGraph* AliasCFLGraphBuilder::buildBigraph(ConstraintGraph *graph, Kind startKind, GrammarBase *grammar)
+int getCallerId(ConstraintEdge* edge,
+                std::unordered_map<int, int>& callerIdRenumbering)
+{
+    int callerId = 0;
+    switch (edge->getEdgeKind())
+    {
+    case ConstraintEdge::Call:
+        callerId = SVFUtil::dyn_cast<CallCGEdge>(edge)->getCallerID();
+        break;
+    case ConstraintEdge::Ret:
+        callerId = SVFUtil::dyn_cast<RetCGEdge>(edge)->getCallerID();
+        break;
+    default:
+        assert(false && "unreachable");
+    }
+
+    if (callerIdRenumbering.count(callerId) == 0)
+    {
+        auto curInd = callerIdRenumbering.size();
+        callerIdRenumbering[callerId] = curInd;
+    }
+
+    return callerIdRenumbering[callerId];
+}
+
+CFLGraph* AliasCFLGraphBuilder::buildBigraph(ConstraintGraph* graph,
+                                             Kind startKind,
+                                             GrammarBase* grammar)
 {
     cflGraph = new CFLGraph(startKind);
 
     buildlabelToKindMap(grammar);
-    for(auto it = graph->begin(); it!= graph->end(); it++)
+    std::unordered_map<int, int> callerIdRenumbering;
+    for (auto it = graph->begin(); it != graph->end(); it++)
     {
         CFLNode* node = new CFLNode((*it).first);
         cflGraph->addCFLNode((*it).first, node);
@@ -306,6 +334,20 @@ CFLGraph* AliasCFLGraphBuilder::buildBigraph(ConstraintGraph *graph, Kind startK
                 label.append("bar");   // for example Gep_i should be Gepbar_i, not Gep_ibar
                 cflGraph->addCFLEdge(cflGraph->getGNode(edge->getDstID()), cflGraph->getGNode(edge->getSrcID()), CFGrammar::getAttributedKind(attr, labelToKindMap[label]));
                 addAttribute(labelToKindMap[label], attr);
+            }
+            else if (CallCGEdge::classof(edge) || RetCGEdge::classof(edge))
+            {
+                CFGrammar::Attribute attr =
+                    getCallerId(edge, callerIdRenumbering);
+
+                addAttribute(edgeLabel, attr);
+
+                auto* srcCFLGraphNode = cflGraph->getGNode(edge->getSrcID());
+                auto* dstCFLGraphNode = cflGraph->getGNode(edge->getDstID());
+                edgeLabel = CFGrammar::getAttributedKind(attr, edgeLabel);
+
+                cflGraph->addCFLEdge(srcCFLGraphNode, dstCFLGraphNode,
+                                     edgeLabel);
             }
             else
             {
@@ -409,33 +451,10 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
                 CFGrammar::Kind edgeKind = edge->getEdgeKind();
 
                 std::string label = kindToLabelMap[edge->getEdgeKind()];
-                label.append("bar"); // for example Gep_i should be
-                CFGrammar::Kind reverseEdgeKind = labelToKindMap[label];
 
-                int callerId = 0;
-                switch (edge->getEdgeKind())
-                {
-                case ConstraintEdge::Call:
-                    callerId =
-                        SVFUtil::dyn_cast<CallCGEdge>(edge)->getCallerID();
-                    break;
-                case ConstraintEdge::Ret:
-                    callerId =
-                        SVFUtil::dyn_cast<RetCGEdge>(edge)->getCallerID();
-                    break;
-                default:
-                    assert(false && "unreachable");
-                }
-
-                if (callerIdRenumbering.count(callerId) > 0)
-                {
-                    callerId = callerIdRenumbering[callerId];
-                }
-                else
-                {
-                    auto curInd = callerIdRenumbering.size();
-                    callerIdRenumbering[callerId] = curInd;
-                }
+                int callerId = getCallerId(edge, callerIdRenumbering);
+                // std::cout << "Adding " << edgeKind << " label " << label
+                //           << " id " << callerId << std::endl;
 
                 CFGrammar::Attribute attr = callerId;
                 addAttribute(edgeKind, attr);
@@ -443,11 +462,6 @@ CFLGraph* AliasCFLGraphBuilder::buildBiPEGgraph(ConstraintGraph *graph, Kind sta
                 cflGraph->addCFLEdge(cflGraph->getGNode(edge->getSrcID()),
                                      cflGraph->getGNode(edge->getDstID()),
                                      edgeLabel);
-                auto reverseLabel =
-                    CFGrammar::getAttributedKind(attr, reverseEdgeKind);
-                cflGraph->addCFLEdge(cflGraph->getGNode(edge->getSrcID()),
-                                     cflGraph->getGNode(edge->getDstID()),
-                                     reverseLabel);
             }
             else if ( edge->getEdgeKind() == ConstraintEdge::VariantGep)
             {

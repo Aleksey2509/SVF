@@ -19,6 +19,7 @@ target_sources(
 target_include_directories(SvfCore PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>)
 
 target_link_libraries(SvfCore PUBLIC LAGraphX)
+target_link_libraries(SvfCore PUBLIC cfl-idr-with-la::cfl_lib)
 
 # Set the library & .so version of the core library
 set_target_properties(SvfCore PROPERTIES VERSION ${SVF_VERSION} SOVERSION ${SVF_VERSION_MAJOR})

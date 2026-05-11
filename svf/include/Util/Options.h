@@ -234,6 +234,8 @@ public:
     static const Option<bool> CFLPrintFullGraphs;
     static const Option<bool> CFLMeasureFullRuntime;
     static const Option<bool> CFLAliasMeasureAlgorithmRuntime;
+    static const Option<bool> CFLCallSensitivity;
+    static const Option<bool> CFLInterleavedCallSensitivity;
     static const Option<bool> MTXCopyBackOnlyStarting;
     static const Option<bool> MTXAlias;
     static const Option<bool> AdvancedMTXAlias;
