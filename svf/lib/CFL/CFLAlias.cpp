@@ -319,7 +319,7 @@ void MTXAlias::initializeSolver()
 
 void AdvMTXAlias::initializeSolver()
 {
-    solver = new MTXSolver(graph, grammar);
+    solver = new AdvMTXSolver(graph, grammar);
 }
 
 void POCRAlias::initializeSolver()
