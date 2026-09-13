@@ -37,9 +37,11 @@
 #include "Graphs/CFLGraph.h"
 #include "LAGraphX.h"
 #include "Util/Options.h"
+#include "Util/SVFUtil.h"
 #include "Util/WorkList.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 
 using namespace std;
 
@@ -112,6 +114,20 @@ protected:
     //@}
 
 protected:
+    static void checkLAGraphResult(GrB_Info result, const char* operation,
+                                   const char* message)
+    {
+        if (result == GrB_SUCCESS)
+            return;
+
+        SVFUtil::errs() << "LAGraph operation '" << operation
+                        << "' failed with status " << result;
+        if (message != nullptr && message[0] != '\0')
+            SVFUtil::errs() << ": " << message;
+        SVFUtil::errs() << '\n';
+        std::abort();
+    }
+
     CFLGraph* graph;
     CFGrammar* grammar;
     /// Worklist for resolution
@@ -245,9 +261,11 @@ struct MTXSolver : public CFLSolver
         }
 
         auto begin_first = std::chrono::high_resolution_clock::now();
-        LAGraph_CFL_reachability(outputs.data(), inputs.data(), termsCount,
-                                 nonTermsCount, rules.data(), rules.size(),
-                                 nullptr);
+        char message[LAGRAPH_MSG_LEN] = {};
+        GrB_Info result = LAGraph_CFL_reachability(
+            outputs.data(), inputs.data(), termsCount, nonTermsCount,
+            rules.data(), rules.size(), message);
+        checkLAGraphResult(result, "LAGraph_CFL_reachability", message);
 
         auto end_first = std::chrono::high_resolution_clock::now();
         if (Options::CFLAliasMeasureAlgorithmRuntime())
@@ -285,6 +303,18 @@ struct MTXSolver : public CFLSolver
 
 struct AdvMTXSolver : public CFLSolver
 {
+    enum Optimization : uint8_t
+    {
+        EmptyOptimization = 1U << 0,
+        FormatOptimization = 1U << 1,
+        LazyOptimization = 1U << 2,
+        BlockOptimization = 1U << 3,
+    };
+
+    static constexpr uint8_t AllOptimizations =
+        EmptyOptimization | FormatOptimization | LazyOptimization |
+        BlockOptimization;
+
     AdvMTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
@@ -783,9 +813,23 @@ struct AdvMTXSolver : public CFLSolver
                        });
 
         auto begin_first = std::chrono::high_resolution_clock::now();
-        LAGraph_CFL_reachability_adv(
+        const u32_t configuredOptimizations =
+            Options::AdvancedMTXOptimizations();
+        if ((configuredOptimizations & ~u32_t(AllOptimizations)) != 0)
+        {
+            SVFUtil::errs()
+                << "Invalid -adv-mtx-optimizations mask: "
+                << configuredOptimizations
+                << "; supported bits are 1, 2, 4, and 8\n";
+            std::abort();
+        }
+
+        char message[LAGRAPH_MSG_LEN] = {};
+        GrB_Info result = LAGraph_CFL_reachability_adv(
             outputs.data(), inputs.data(), symbolsCount, LAGraphRules.data(),
-            LAGraphRules.size(), nullptr, 1 | 2 | 4 | 8);
+            LAGraphRules.size(), message,
+            static_cast<int8_t>(configuredOptimizations));
+        checkLAGraphResult(result, "LAGraph_CFL_reachability_adv", message);
         auto end_first = std::chrono::high_resolution_clock::now();
         if (Options::CFLAliasMeasureAlgorithmRuntime())
         {

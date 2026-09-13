@@ -779,6 +779,14 @@ const Option<bool> Options::AdvancedMTXAlias
 
 );
 
+const Option<u32_t> Options::AdvancedMTXOptimizations
+(
+    "adv-mtx-optimizations",
+    "LAGraph advanced CFL optimization bit mask: empty=1, format=2, lazy=4, "
+    "block=8",
+    7
+);
+
 const Option<bool> Options::POCRAlias(
     "pocr-alias",
     "When explicit to true, cfl data builder will transfer CFL graph to CFLData.",

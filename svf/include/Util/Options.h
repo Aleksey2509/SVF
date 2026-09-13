@@ -230,6 +230,7 @@ public:
     static const Option<bool> MTXCopyBackOnlyStarting;
     static const Option<bool> MTXAlias;
     static const Option<bool> AdvancedMTXAlias;
+    static const Option<u32_t> AdvancedMTXOptimizations;
     static const Option<bool> POCRAlias;
     static const Option<bool> POCRHybrid;
     static const Option<bool> Customized;
