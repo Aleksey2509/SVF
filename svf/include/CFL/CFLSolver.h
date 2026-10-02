@@ -318,11 +318,28 @@ struct AdvMTXSolver : public CFLSolver
     AdvMTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
         : CFLSolver(_graph, _grammar)
     {
+        normalCheckIndices();
         LAGraph_Init(nullptr);
         setupGraphNodesMaps();
         setupRules();
         LAGraphRules = initRules();
     }
+
+    [[noreturn]] void rejectIndexedGrammar(const std::string& reason,
+                                           Symbol symbol) const
+    {
+        std::string symbolName = grammar->kindToStr(symbol.kind);
+        if (symbol.variableAttribute != 0)
+            symbolName += "_" + std::string(1, char(symbol.variableAttribute));
+        else if (grammar->getAttrSyms().count(symbol.kind) != 0)
+            symbolName += "_" + std::to_string(symbol.attribute);
+
+        SVFUtil::errs() << "AdvMTXSolver requires uniformly indexed grammar "
+                           "rules: "
+                        << reason << " (symbol " << symbolName << ")\n";
+        std::abort();
+    }
+
 
     void insertSymbols(
         const std::unordered_set<int>& symbolsSet,
@@ -438,70 +455,77 @@ struct AdvMTXSolver : public CFLSolver
         insertSymbols(origNonTerms, SVFSymbolKindToMaxAttrVal);
     }
 
+    // Validate before setupRules() discards concrete attributes. Each rule
+    // shape must contain exactly the family that indexed expansion recreates.
     void normalCheckIndices()
     {
-        std::vector<std::unordered_set<int>> setsOfSymbolsWithSameMaxes;
-        auto insertOrGetSetWithSymbol = [&setsOfSymbolsWithSameMaxes](
-                                            int kind) {
-            auto setIt =
-                std::find_if(setsOfSymbolsWithSameMaxes.begin(),
-                             setsOfSymbolsWithSameMaxes.end(),
-                             [kind](std::unordered_set<int>& sameAttrSet) {
-                                 return sameAttrSet.count(kind) > 0;
-                             });
-            if (setIt != setsOfSymbolsWithSameMaxes.end())
-                return setIt;
-            setsOfSymbolsWithSameMaxes.push_back(std::unordered_set<int>{kind});
-            return --setsOfSymbolsWithSameMaxes.end();
-        };
+        GrammarBase::Productions productions;
+        for (const auto& prod : grammar->getEpsilonProds())
+            productions.insert(prod);
+        for (const auto& [rhs, prods] : grammar->getSingleRHSToProds())
+            productions.insert(prods.begin(), prods.end());
+        for (const auto& [rhs, prods] : grammar->getFirstRHSToProds())
+            productions.insert(prods.begin(), prods.end());
 
-        auto handleSymbol = [this, &insertOrGetSetWithSymbol](int nonTermIt,
-                                                              int symbolKind) {
-            auto maxSingleSymbolAttrVal = maxAttrValOrZero(symbolKind);
-            if (maxSingleSymbolAttrVal == 0)
-                return;
-            auto nonTermSetIt = insertOrGetSetWithSymbol(nonTermIt);
-            nonTermSetIt->insert(symbolKind);
-        };
-
-        for (auto nonTermId : origNonTerms)
-        {
-            auto maxAttrVal = maxAttrValOrZero(nonTermId);
-            if (maxAttrVal == 0)
-                continue;
-            (void)insertOrGetSetWithSymbol(nonTermId);
-
-            for (auto& rule : origRules[nonTermId])
+        std::unordered_map<int, unsigned> maximumIndValue;
+        for (const auto& prod : productions)
+            for (Symbol symbol : prod)
             {
-                assert((rule.size() == 1 || rule.size() == 2) &&
-                       "Unexpected rules size");
-                handleSymbol(nonTermId, rule.front());
-                if (rule.size() == 2)
-                    handleSymbol(nonTermId, rule.back());
+                if (symbol.variableAttribute != 0)
+                    rejectIndexedGrammar("unexpanded index variable", symbol);
+                maximumIndValue[symbol.kind] =
+                    std::max(maximumIndValue[symbol.kind], unsigned(symbol.attribute));
             }
+
+        std::unordered_map<Production, std::unordered_set<unsigned>,
+                           GrammarBase::SymbolVectorHash>
+            families;
+        for (const auto& prod : productions)
+        {
+            Production ruleFilteredFromInds;
+            std::unordered_set<int> maxIndexValues;
+            std::transform(prod.begin(), prod.end(), std::inserter(maxIndexValues, maxIndexValues.begin()),
+                        [&maximumIndValue](Symbol s){return maximumIndValue.at(s.kind);});
+            if (maxIndexValues.size() > 2 || ( maxIndexValues.size() > 1 && maxIndexValues.count(0) == 0))
+                rejectIndexedGrammar(
+                    "indexed symbols in a rule must have matching "
+                    "indices and ranges", prod[0]);
+
+            std::unordered_set<int> indexValues;
+            for (Symbol symbol : prod)
+            {
+                // Symbols with only index zero stay fixed during compression.
+                if (maximumIndValue.at(symbol.kind) > 0)
+                    indexValues.insert(symbol.attribute);
+            }
+
+            if (indexValues.size() > 1)
+            {
+                rejectIndexedGrammar(
+                    "indexed symbols in a rule must have matching "
+                    "indices and ranges",
+                    prod[0]);
+            }
+            std::transform(prod.begin(), prod.end(), std::back_inserter(ruleFilteredFromInds),
+                        [](Symbol s){return s.kind;});
+            if (indexValues.empty())
+                families[ruleFilteredFromInds].insert(0);
+            else
+                families[ruleFilteredFromInds].insert(*indexValues.begin());
         }
 
-        auto setHasNonSameMaxAttrVal =
-            [this](std::unordered_set<int>& sameMaxValSet) {
-                assert(sameMaxValSet.size() > 1);
-                auto maxAttrVal =
-                    SVFSymbolKindToMaxAttrVal.at(*sameMaxValSet.begin());
-
-                return std::any_of(sameMaxValSet.begin(), sameMaxValSet.end(),
-                                   [this, maxAttrVal](int kind) {
-                                       return SVFSymbolKindToMaxAttrVal.at(
-                                                  kind) != maxAttrVal;
-                                   });
-            };
-
-        auto mismatchIt = std::find_if(setsOfSymbolsWithSameMaxes.begin(),
-                                       setsOfSymbolsWithSameMaxes.end(),
-                                       setHasNonSameMaxAttrVal);
-        if (mismatchIt != setsOfSymbolsWithSameMaxes.end())
+        for (const auto& [shape, indices] : families)
         {
-            // TODO More gracefull failing
-            assert(false &&
-                   "Group of symbols which must have same max attr val do not");
+            unsigned maximum = 0;
+            for (Symbol symbol : shape)
+                maximum = std::max(maximum, maximumIndValue.at(symbol.kind));
+            // All observed indices lie in [0, maximum], so this cardinality
+            // proves both density and completeness, including index zero.
+            if (indices.size() != size_t(maximum) + 1)
+                rejectIndexedGrammar(
+                    "incomplete indexed rule family (expected every index "
+                    "from zero through the family maximum)",
+                    shape.front());
         }
     }
 
