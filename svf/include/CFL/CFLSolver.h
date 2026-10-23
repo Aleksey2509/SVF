@@ -244,12 +244,12 @@ struct MTXSolver : public CFLSolver
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
 
-        std::vector<GrB_Matrix> outputs(nonTermsCount);
-        std::transform(outputs.begin(), outputs.end(), outputs.begin(),
-                       [this](GrB_Matrix mat) {
-                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
-                           return mat;
-                       });
+        std::vector<GrB_Matrix> outputs(nonTermsCount, nullptr);
+        std::vector<std::unique_ptr<GrB_Matrix, decltype(&GrB_Matrix_free)>>
+            outputOwners;
+        outputOwners.reserve(outputs.size());
+        for (auto& output : outputs)
+            outputOwners.emplace_back(&output, &GrB_Matrix_free);
         auto end_init = std::chrono::high_resolution_clock::now();
         if (Options::CFLAliasMeasureAlgorithmRuntime())
         {
@@ -286,7 +286,7 @@ struct MTXSolver : public CFLSolver
         }
         else
         {
-            convertResultsFromLAGraph(std::move(outputs));
+            convertResultsFromLAGraph(outputs);
         }
 
         auto end_finish = std::chrono::high_resolution_clock::now();
@@ -829,12 +829,12 @@ struct AdvMTXSolver : public CFLSolver
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
-        std::vector<GrB_Matrix> outputs(symbolsCount);
-        std::transform(outputs.begin(), outputs.end(), outputs.begin(),
-                       [this](GrB_Matrix mat) {
-                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
-                           return mat;
-                       });
+        std::vector<GrB_Matrix> outputs(symbolsCount, nullptr);
+        std::vector<std::unique_ptr<GrB_Matrix, decltype(&GrB_Matrix_free)>>
+            outputOwners;
+        outputOwners.reserve(outputs.size());
+        for (auto& output : outputs)
+            outputOwners.emplace_back(&output, &GrB_Matrix_free);
 
         auto begin_first = std::chrono::high_resolution_clock::now();
         const u32_t configuredOptimizations =
@@ -872,7 +872,7 @@ struct AdvMTXSolver : public CFLSolver
         }
         else
         {
-            convertResultsFromLAGraph(std::move(outputs));
+            convertResultsFromLAGraph(outputs);
         }
     }
 
