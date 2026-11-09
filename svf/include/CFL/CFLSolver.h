@@ -340,23 +340,24 @@ struct AdvMTXSolver : public CFLSolver
         std::abort();
     }
 
-
-    void insertSymbols(
-        const std::unordered_set<int>& symbolsSet,
-        const std::unordered_map<int, int>& SymbolKindToMaxAttrVal)
+    void insertSymbols(const std::unordered_set<int>& symbolsSet)
     {
-        for (auto sym : symbolsSet)
+        for (auto kind : symbolsSet)
         {
-            if (SVFToLAGraphSymbol.count(sym))
+            if (symbolKindToBase.count(kind) != 0)
                 continue;
-            auto maxVal = maxAttrValOrZero(sym);
-            CFGrammar::Symbol newNonTermSymbol = sym;
-            for (int i = 0; i != maxVal + 1; ++i)
+            symbolKindToBase[kind] = symbolsCount;
+            auto found = symbolAttributes.find(kind);
+            // Unused declared symbols still get a single empty input matrix.
+            std::vector<unsigned> attributes = found == symbolAttributes.end()
+                                                   ? std::vector<unsigned>{0}
+                                                   : found->second;
+            for (auto attribute : attributes)
             {
-                SVFToLAGraphSymbol[newNonTermSymbol] = symbolsCount;
-                LAGraphToSVFSymbol[symbolsCount] = newNonTermSymbol;
-                ++symbolsCount;
-                ++newNonTermSymbol.attribute;
+                Symbol symbol(kind);
+                symbol.attribute = attribute;
+                SVFToLAGraphSymbol[symbol] = symbolsCount;
+                LAGraphToSVFSymbol[symbolsCount++] = symbol;
             }
         }
     }
@@ -372,18 +373,16 @@ struct AdvMTXSolver : public CFLSolver
         for (auto& [termName, termId] : grammar->getNonterminals())
             origNonTerms.insert(termId);
 
-        auto UpdateSymbolMaxIndex = [this](CFGrammar::Symbol sym) {
-            if (sym.attribute == 0)
-                return;
-            SVFSymbolKindToMaxAttrVal[sym.kind] = std::max<int>(
-                sym.attribute, SVFSymbolKindToMaxAttrVal[sym.kind]);
-        };
+        // Counts refer to dense LAGraph positions, not original attributes.
+        for (const auto& [kind, attributes] : symbolAttributes)
+            SVFSymbolKindToMaxAttrVal[kind] = attributes.size() - 1;
 
         CFGrammar::Symbol epsilonTerm = 0;
         if (grammar->getTerminals().count("epsilon"))
         {
             epsilonTerm = grammar->strToKind("epsilon");
             SVFToLAGraphSymbol[epsilonTerm] = -1;
+            symbolKindToBase[epsilonTerm.kind] = -1;
             LAGraphToSVFSymbol[-1] = epsilonTerm;
         }
 
@@ -391,8 +390,6 @@ struct AdvMTXSolver : public CFLSolver
         {
             auto& nonterm = grammar->getLHSSymbol(prod);
             assert(origTerms.count(nonterm.kind) == 0);
-
-            UpdateSymbolMaxIndex(nonterm);
 
             CFGrammar::Symbol zeroedNonTerm = nonterm.kind;
             origRules[zeroedNonTerm].insert({epsilonTerm});
@@ -405,9 +402,6 @@ struct AdvMTXSolver : public CFLSolver
                 auto& nonterm = grammar->getLHSSymbol(prod);
                 auto rhs = prod.at(1);
                 assert(origTerms.count(nonterm.kind) == 0);
-
-                UpdateSymbolMaxIndex(nonterm);
-                UpdateSymbolMaxIndex(rhs);
 
                 CFGrammar::Symbol zeroedNonTerm = nonterm.kind;
                 CFGrammar::Symbol zeroedRhs = rhs.kind;
@@ -424,10 +418,6 @@ struct AdvMTXSolver : public CFLSolver
                 auto FirstRhs = prod.at(1);
                 auto SecondRhs = prod.at(2);
 
-                UpdateSymbolMaxIndex(Nonterm);
-                UpdateSymbolMaxIndex(FirstRhs);
-                UpdateSymbolMaxIndex(SecondRhs);
-
                 CFGrammar::Symbol zeroedNonTerm = Nonterm.kind;
                 CFGrammar::Symbol zeroedFirstRhs = FirstRhs.kind;
                 CFGrammar::Symbol zeroedSecondRhs = SecondRhs.kind;
@@ -436,27 +426,14 @@ struct AdvMTXSolver : public CFLSolver
             }
         }
 
-        auto StartNonTerm = grammar->getStartKind();
-        auto maxVal = 0;
-        if (SVFSymbolKindToMaxAttrVal.count(StartNonTerm) > 0)
-        {
-            maxVal = SVFSymbolKindToMaxAttrVal.at(StartNonTerm);
-        }
-        CFGrammar::Symbol newNonTermSymbol = StartNonTerm;
-        for (int i = 0; i != maxVal + 1; ++i)
-        {
-            SVFToLAGraphSymbol[newNonTermSymbol] = symbolsCount;
-            LAGraphToSVFSymbol[symbolsCount] = newNonTermSymbol;
-            ++symbolsCount;
-            ++newNonTermSymbol.attribute;
-        }
-
-        insertSymbols(origTerms, SVFSymbolKindToMaxAttrVal);
-        insertSymbols(origNonTerms, SVFSymbolKindToMaxAttrVal);
+        // LAGraph requires the start symbol at position zero.
+        insertSymbols({int(grammar->getStartKind())});
+        insertSymbols(origTerms);
+        insertSymbols(origNonTerms);
     }
 
-    // Validate before setupRules() discards concrete attributes. Each rule
-    // shape must contain exactly the family that indexed expansion recreates.
+    // Preserve sparse original attributes while validating the rule families
+    // that will be expanded over consecutive LAGraph positions.
     void normalCheckIndices()
     {
         GrammarBase::Productions productions;
@@ -467,64 +444,57 @@ struct AdvMTXSolver : public CFLSolver
         for (const auto& [rhs, prods] : grammar->getFirstRHSToProds())
             productions.insert(prods.begin(), prods.end());
 
-        std::unordered_map<int, unsigned> maximumIndValue;
+        symbolAttributes.clear();
         for (const auto& prod : productions)
             for (Symbol symbol : prod)
             {
                 if (symbol.variableAttribute != 0)
                     rejectIndexedGrammar("unexpanded index variable", symbol);
-                maximumIndValue[symbol.kind] =
-                    std::max(maximumIndValue[symbol.kind], unsigned(symbol.attribute));
+                symbolAttributes[symbol.kind].push_back(symbol.attribute);
             }
+        for (auto& [kind, attributes] : symbolAttributes)
+        {
+            std::sort(attributes.begin(), attributes.end());
+            attributes.erase(std::unique(attributes.begin(), attributes.end()),
+                             attributes.end());
+        }
 
         std::unordered_map<Production, std::unordered_set<unsigned>,
                            GrammarBase::SymbolVectorHash>
             families;
         for (const auto& prod : productions)
         {
-            Production ruleFilteredFromInds;
-            std::unordered_set<int> maxIndexValues;
-            std::transform(prod.begin(), prod.end(), std::inserter(maxIndexValues, maxIndexValues.begin()),
-                        [&maximumIndValue](Symbol s){return maximumIndValue.at(s.kind);});
-            if (maxIndexValues.size() > 2 || ( maxIndexValues.size() > 1 && maxIndexValues.count(0) == 0))
-                rejectIndexedGrammar(
-                    "indexed symbols in a rule must have matching "
-                    "indices and ranges", prod[0]);
-
-            std::unordered_set<int> indexValues;
+            Production shape;
+            const std::vector<unsigned>* domain = nullptr;
+            unsigned index = 0;
             for (Symbol symbol : prod)
             {
-                // Symbols with only index zero stay fixed during compression.
-                if (maximumIndValue.at(symbol.kind) > 0)
-                    indexValues.insert(symbol.attribute);
+                const auto& attributes = symbolAttributes.at(symbol.kind);
+                // A family containing only zero stays fixed.
+                if (attributes.size() != 1 || attributes.front() != 0)
+                {
+                    if (domain != nullptr &&
+                        (*domain != attributes || index != symbol.attribute))
+                        rejectIndexedGrammar(
+                            "indexed symbols must have matching attributes "
+                            "and attribute domains",
+                            symbol);
+                    domain = &attributes;
+                    index = symbol.attribute;
+                }
+                shape.push_back(Symbol(symbol.kind));
             }
-
-            if (indexValues.size() > 1)
-            {
-                rejectIndexedGrammar(
-                    "indexed symbols in a rule must have matching "
-                    "indices and ranges",
-                    prod[0]);
-            }
-            std::transform(prod.begin(), prod.end(), std::back_inserter(ruleFilteredFromInds),
-                        [](Symbol s){return s.kind;});
-            if (indexValues.empty())
-                families[ruleFilteredFromInds].insert(0);
-            else
-                families[ruleFilteredFromInds].insert(*indexValues.begin());
+            families[shape].insert(index);
         }
-
         for (const auto& [shape, indices] : families)
         {
-            unsigned maximum = 0;
+            size_t count = 1;
             for (Symbol symbol : shape)
-                maximum = std::max(maximum, maximumIndValue.at(symbol.kind));
-            // All observed indices lie in [0, maximum], so this cardinality
-            // proves both density and completeness, including index zero.
-            if (indices.size() != size_t(maximum) + 1)
+                count =
+                    std::max(count, symbolAttributes.at(symbol.kind).size());
+            if (indices.size() != count)
                 rejectIndexedGrammar(
-                    "incomplete indexed rule family (expected every index "
-                    "from zero through the family maximum)",
+                    "incomplete indexed rule family for its attribute domain",
                     shape.front());
         }
     }
@@ -680,7 +650,7 @@ struct AdvMTXSolver : public CFLSolver
                  maxAttrVal != maxSingleRhsInd) &&
                "Different maximums!!");
         maxAttrVal = std::max(maxSingleRhsInd, maxAttrVal);
-        auto singleRhsTermLAGraph = SVFToLAGraphSymbol.at(svfKind);
+        auto singleRhsTermLAGraph = symbolKindToBase.at(svfKind);
 
         return singleRhsTermLAGraph;
     }
@@ -720,12 +690,13 @@ struct AdvMTXSolver : public CFLSolver
             return SVFTermToLAGraphNonTerm.at(kind);
 
         int NewLAGraphNonTermId = symbolsCount;
+        SVFTermToLAGraphNonTerm[kind] = NewLAGraphNonTermId;
 
         auto indexCount = maxAttrValOrZero(kind) + 1;
         for (int i = 0; i < indexCount; ++i)
         {
             Symbol SVFSymbol(kind);
-            SVFSymbol.attribute = i;
+            SVFSymbol.attribute = symbolAttributes.at(kind).at(i);
 
             int LAGraphNonTermId = symbolsCount++;
             LAGraphAddedNonTerms.insert(LAGraphNonTermId);
@@ -757,7 +728,7 @@ struct AdvMTXSolver : public CFLSolver
             auto nonTermIndexCount = maxAttrValOrZero(nonTerm.kind) + 1;
             uint8_t nonTermIndexed =
                 nonTermIndexCount > 1 ? LAGraph_EWNCF_INDEX_NONTERM : 0;
-            auto nonTermLAGraph = SVFToLAGraphSymbol.at(nonTerm.kind);
+            auto nonTermLAGraph = symbolKindToBase.at(nonTerm.kind);
 
             for (auto&& prod : prods)
             {
@@ -896,6 +867,8 @@ private:
     std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions,
                        CFGrammar::SymbolHash>
         origRules;
+    std::unordered_map<int, std::vector<unsigned>> symbolAttributes;
+    std::unordered_map<int, int> symbolKindToBase;
     std::unordered_map<int, int> SVFSymbolKindToMaxAttrVal;
     std::vector<GrB_Matrix> adjMatricesHolder;
     std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
