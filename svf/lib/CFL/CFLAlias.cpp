@@ -270,7 +270,8 @@ void CFLAlias::solve()
     }
     if (Options::CFLGraph().empty())
     {
-        while (updateCallGraph(svfir->getIndirectCallsites()))
+        while (!Options::CFLAliasSinglePass() &&
+               updateCallGraph(svfir->getIndirectCallsites()))
         {
             numOfIteration++;
             if (Options::CFLPrintFullGraphs())

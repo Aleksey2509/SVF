@@ -743,6 +743,13 @@ const Option<bool> Options::CFLPrintFullGraphs
     false
 );
 
+const Option<bool> Options::CFLAliasSinglePass
+(
+    "cfl-alias-single-pass",
+    "Experimental: solve CFL alias analysis once without refining indirect calls; results may omit aliases",
+    false
+);
+
 const Option<bool> Options::CFLMeasureFullRuntime
 (
     "cfl-alias-measure-runtime",
