@@ -225,6 +225,7 @@ public:
     static const Option<bool>  PEGTransfer;
     static const Option<bool>  CFLSVFG;
     static const Option<bool> CFLPrintFullGraphs;
+    static const Option<bool> CFLPrintAliasStats;
     static const Option<bool> CFLAliasSinglePass;
     static const Option<bool> CFLMeasureFullRuntime;
     static const Option<bool> CFLAliasMeasureAlgorithmRuntime;

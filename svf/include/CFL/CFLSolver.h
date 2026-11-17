@@ -136,6 +136,40 @@ protected:
     WorkList worklist;
 };
 
+static std::unique_ptr<CFLDyckBase> getDyckSolver(CFLGraph* graph,
+                                                  CFGrammar* grammar)
+{
+    bool call = Options::CFLCallSensitivity();
+    bool interleaved = Options::CFLInterleavedCallSensitivity();
+    if (call && interleaved)
+    {
+        SVFUtil::errs() << "Select only one CFL sensitivity mode: call or IDR\n";
+        std::abort();
+    }
+    if (!call && !interleaved)
+        return nullptr;
+
+    const auto& terminals = grammar->getTerminals();
+    auto requireTerminal = [&](const char* name) {
+        if (terminals.count(name) == 0)
+        {
+            SVFUtil::errs() << "Requested CFL sensitivity requires terminal '"
+                            << name << "'\n";
+            std::abort();
+        }
+    };
+    requireTerminal("call");
+    requireTerminal("ret");
+    if (interleaved)
+    {
+        requireTerminal("gep");
+        requireTerminal("gepbar");
+        return std::make_unique<CFLInterDyckSolver>(graph, grammar);
+    }
+    return std::make_unique<CFLDyckSolver>(
+        graph, grammar, terminals.at("call"), terminals.at("ret"));
+}
+
 struct MTXSolver : public CFLSolver
 {
     MTXSolver(CFLGraph* _graph, CFGrammar* _grammar)
@@ -145,25 +179,7 @@ struct MTXSolver : public CFLSolver
         setupNonTermMaps();
         setupTermMaps();
         convertGrammarToLAGraphRules();
-        auto terminals = grammar->getTerminals();
-        if ((Options::CFLCallSensitivity() ||
-             Options::CFLInterleavedCallSensitivity()) &&
-            (terminals.count("call") != 0) && (terminals.count("ret") != 0))
-        {
-            auto callKind = terminals["call"];
-            auto retKind = terminals["ret"];
-
-            if (Options::CFLCallSensitivity())
-                dyckSolver = std::make_unique<CFLDyckSolver>(_graph, _grammar,
-                                                             callKind, retKind);
-            if (Options::CFLInterleavedCallSensitivity() &&
-                (terminals.count("gep") != 0) &&
-                (terminals.count("gepbar") != 0))
-            {
-                dyckSolver =
-                    std::make_unique<CFLInterDyckSolver>(_graph, _grammar);
-            }
-        }
+        dyckSolver = getDyckSolver(_graph, _grammar);
     }
     std::vector<LAGraph_rule_WCNF> rules;
     std::unordered_map<GrammarBase::Symbol, GrammarBase::Productions,

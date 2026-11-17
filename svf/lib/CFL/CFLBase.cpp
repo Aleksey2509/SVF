@@ -54,6 +54,15 @@ double CFLBase::numOfChecks = 1;
 
 void CFLBase::checkParameter()
 {
+    if ((Options::CFLCallSensitivity() ||
+         Options::CFLInterleavedCallSensitivity()) &&
+        ((!Options::MTXAlias() && !Options::AdvancedMTXAlias()) ||
+         Options::CFLSVFG() || Options::POCRAlias() || Options::POCRHybrid()))
+    {
+        SVFUtil::errs() << "CFL sensitivity requires -mtx-alias or "
+                          "-adv-mtx-alias without another solver selection\n";
+        std::abort();
+    }
     // Check for valid grammar file before parsing other options
     std::string filename = Options::GrammarFilename();
     bool pagfile = (filename.rfind("PAGGrammar.txt") == filename.length() - std::string("PAGGrammar.txt").length());

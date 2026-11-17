@@ -37,6 +37,7 @@ namespace SVF
 {
 
 class CFLBase;
+class SVFIR;
 
 /*!
  * Statistics of CFL's analysis
@@ -60,6 +61,8 @@ public:
     void CFLGrammarStat();
 
     void CFLSolverStat();
+
+    void printAliasStats(const SVFIR* pag);
 };
 
 } // End namespace SVF

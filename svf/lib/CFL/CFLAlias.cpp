@@ -229,6 +229,9 @@ void CFLAlias::initializeSolver()
 void CFLAlias::finalize()
 {
     numOfChecks = solver->numOfChecks;
+    if (Options::CFLPrintAliasStats())
+        static_cast<CFLStat*>(stat)->printAliasStats(
+            Options::CFLGraph().empty() ? svfir : nullptr);
 
     if (Options::PrintCFL() == true)
     {
@@ -240,6 +243,7 @@ void CFLAlias::finalize()
     if (Options::CFLGraph().empty())
         PointerAnalysis::finalize();
 }
+
 
 void CFLAlias::solve()
 {

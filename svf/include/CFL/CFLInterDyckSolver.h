@@ -81,13 +81,15 @@ public:
     {
         GrB_Index nonZeroElems = 0;
 
-        assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
-               "On matrix nonzero element amount extraction");
+        checkResult(GrB_Matrix_nvals(&nonZeroElems, matrix),
+                    "GrB_Matrix_nvals");
         std::vector<GrB_Index> rowIndices(nonZeroElems);
         std::vector<GrB_Index> colIndices(nonZeroElems);
         auto vals = std::make_unique<bool[]>(nonZeroElems);
-        GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
-                                      vals.get(), &nonZeroElems, matrix);
+        checkResult(GrB_Matrix_extractTuples_BOOL(rowIndices.data(),
+                                                  colIndices.data(), vals.get(),
+                                                  &nonZeroElems, matrix),
+                    "GrB_Matrix_extractTuples_BOOL");
 
         for (size_t i = 0; i < nonZeroElems; ++i)
         {
@@ -122,17 +124,27 @@ public:
         return accessibleVertices[srcId].count(dstId) != 0;
     }
 
+    void reset()
+    {
+        TermToMatrix.clear();
+        Output.reset();
+        NormalMatrix.reset();
+        accessibleVertices.clear();
+    }
+
     void setup(
         const std::unordered_map<int, int>& RefSVFToLAGraphNodes,
         const std::unordered_map<int, int>& RefLAGraphToSVFNodes) override
     {
         SVFToLAGraphNodes = RefSVFToLAGraphNodes;
         LAGraphToSVFNodes = RefLAGraphToSVFNodes;
+        reset();
         setMaxInds();
         auto nodeNum = LAGraphToSVFNodes.size();
         NormalMatrix = GrBMatrixOwner{&NormalMatrixHolder, GrB_Matrix_free};
-        assert(GrB_Matrix_new(NormalMatrix.get(), GrB_BOOL, nodeNum, nodeNum) ==
-               GrB_SUCCESS);
+        checkResult(
+            GrB_Matrix_new(NormalMatrix.get(), GrB_BOOL, nodeNum, nodeNum),
+            "GrB_Matrix_new");
 
         parenToVec = {
             {TermKind::OpenBracket, std::vector<GrB_Matrix>(callMaxFunInd)},
@@ -150,8 +162,9 @@ public:
                 TermToMatrix[bracketKind].push_back(GrBMatrixOwner{
                     &parenToVec[bracketKind][i], GrB_Matrix_free});
                 GrB_Matrix* curTermMatrix = TermToMatrix[bracketKind][i].get();
-                assert(GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum,
-                                      nodeNum) == GrB_SUCCESS);
+                checkResult(
+                    GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum),
+                    "GrB_Matrix_new");
             }
         }
 
@@ -165,8 +178,9 @@ public:
                     &parenToVec[parentesisKind][i], GrB_Matrix_free});
                 GrB_Matrix* curTermMatrix =
                     TermToMatrix[parentesisKind][i].get();
-                assert(GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum,
-                                      nodeNum) == GrB_SUCCESS);
+                checkResult(
+                    GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum),
+                    "GrB_Matrix_new");
             }
         }
 
@@ -210,10 +224,12 @@ public:
                 //           << " originally: " << LAGraphToSVFNodes[srcId]
                 //           << " and " << LAGraphToSVFNodes[dstId] << "\n";
 
-                assert(GrB_Matrix_setElement_BOOL(*NormalMatrix, true, srcId,
-                                                  dstId) == GrB_SUCCESS);
-                assert(GrB_Matrix_setElement_BOOL(*NormalMatrix, true, dstId,
-                                                  srcId) == GrB_SUCCESS);
+                checkResult(GrB_Matrix_setElement_BOOL(*NormalMatrix, true,
+                                                       srcId, dstId),
+                            "GrB_Matrix_setElement_BOOL");
+                checkResult(GrB_Matrix_setElement_BOOL(*NormalMatrix, true,
+                                                       dstId, srcId),
+                            "GrB_Matrix_setElement_BOOL");
                 continue;
             }
 
@@ -225,8 +241,9 @@ public:
                 //           << " and " << LAGraphToSVFNodes[dstId] << "\n";
                 GrB_Matrix* curTermMatrix =
                     TermToMatrix[TermKind::OpenBracket][attribute].get();
-                assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
-                                                  dstId) == GrB_SUCCESS);
+                checkResult(GrB_Matrix_setElement_BOOL(*curTermMatrix, true,
+                                                       srcId, dstId),
+                            "GrB_Matrix_setElement_BOOL");
             }
             else if (edgeKind == retKind_)
             {
@@ -236,8 +253,9 @@ public:
                 //           << " and " << LAGraphToSVFNodes[dstId] << "\n";
                 GrB_Matrix* curTermMatrix =
                     TermToMatrix[TermKind::CloseBracket][attribute].get();
-                assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
-                                                  dstId) == GrB_SUCCESS);
+                checkResult(GrB_Matrix_setElement_BOOL(*curTermMatrix, true,
+                                                       srcId, dstId),
+                            "GrB_Matrix_setElement_BOOL");
             }
             else if (edgeKind == gepKind_ || edgeKind == gepBarKind_)
             {
@@ -249,12 +267,14 @@ public:
                 //           << " with value " << attribute << "\n";
                 GrB_Matrix* gepTermMatrix =
                     TermToMatrix[TermKind::OpenParenthesis][attribute].get();
-                assert(GrB_Matrix_setElement_BOOL(*gepTermMatrix, true, srcId,
-                                                  dstId) == GrB_SUCCESS);
+                checkResult(GrB_Matrix_setElement_BOOL(*gepTermMatrix, true,
+                                                       srcId, dstId),
+                            "GrB_Matrix_setElement_BOOL");
                 GrB_Matrix* gepBarTermMatrix =
                     TermToMatrix[TermKind::CloseParenthesis][attribute].get();
-                assert(GrB_Matrix_setElement_BOOL(*gepBarTermMatrix, true,
-                                                  dstId, srcId) == GrB_SUCCESS);
+                checkResult(GrB_Matrix_setElement_BOOL(*gepBarTermMatrix, true,
+                                                       dstId, srcId),
+                            "GrB_Matrix_setElement_BOOL");
             }
             else
             {
@@ -265,12 +285,9 @@ public:
 
     void solve() override
     {
-        auto nodeNum = LAGraphToSVFNodes.size();
         Output = GrBMatrixOwner{&OutputHolder, GrB_Matrix_free};
-        assert(GrB_Matrix_new(Output.get(), GrB_BOOL, nodeNum, nodeNum) ==
-               GrB_SUCCESS);
 
-        IdrGraph input;
+        IdrGraph input{};
         input.n = LAGraphToSVFNodes.size();
         input.normal = *NormalMatrix.get();
 
@@ -281,9 +298,11 @@ public:
         input.n_par = gepMaxInd;
         input.open_par = parenToVec[TermKind::OpenParenthesis].data();
         input.close_par = parenToVec[TermKind::CloseParenthesis].data();
-        assert(idr_get_over_approx(&input, IDR_DEFAULT, NULL, Output.get(),
-                                   false, false) == GrB_SUCCESS);
+        checkResult(idr_get_over_approx(Output.get(), &input, IDR_DEFAULT, NULL,
+                                        false, false),
+                    "idr_get_over_approx");
         convertResults(OutputHolder);
+        Output.reset();
     }
 
 private:
@@ -301,8 +320,8 @@ private:
     std::unordered_map<int, int> LAGraphToSVFNodes;
     std::unordered_map<int, int> SVFToLAGraphNodes;
 
-    GrB_Matrix NormalMatrixHolder;
-    GrB_Matrix OutputHolder;
+    GrB_Matrix NormalMatrixHolder = nullptr;
+    GrB_Matrix OutputHolder = nullptr;
     std::unordered_map<TermKind, std::vector<GrB_Matrix>> parenToVec;
 
     // TODO Check with sanitizers the correctness of destruction

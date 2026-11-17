@@ -146,8 +146,8 @@ public:
 
     void convertGraphToLAGraph()
     {
-        adjMatricesHolder.resize(symbolsCount);
         adjMatrices.clear();
+        adjMatricesHolder.assign(symbolsCount, nullptr);
         adjMatrices.reserve(symbolsCount);
         nodeNum = graph_->getTotalNodeNum();
 
@@ -157,8 +157,9 @@ public:
                 std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>{
                     &adjMatricesHolder[i], GrB_Matrix_free});
             GrB_Matrix* curTermMatrix = adjMatrices[i].get();
-            assert(GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum) ==
-                   GrB_SUCCESS);
+            checkResult(
+                GrB_Matrix_new(curTermMatrix, GrB_BOOL, nodeNum, nodeNum),
+                "GrB_Matrix_new");
         }
 
         auto nonTerms = grammar_->getNonterminals();
@@ -210,8 +211,9 @@ public:
             // }
 
             GrB_Matrix* curTermMatrix = adjMatrices[term].get();
-            assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
-                                              dstId) == GrB_SUCCESS);
+            checkResult(
+                GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId, dstId),
+                "GrB_Matrix_setElement_BOOL");
         }
     }
 
@@ -221,6 +223,8 @@ public:
     {
         SVFToLAGraphNodes = RefSVFToLAGraphNodes;
         LAGraphToSVFNodes = RefLAGraphToSVFNodes;
+        accessibleVertices.clear();
+        setupGrammar();
         convertGraphToLAGraph();
     }
 
@@ -228,14 +232,15 @@ public:
     {
         GrB_Index nonZeroElems = 0;
 
-        assert(GrB_Matrix_nvals(&nonZeroElems, matrix) == 0 &&
-               "On matrix nonzero element amount extraction");
+        checkResult(GrB_Matrix_nvals(&nonZeroElems, matrix),
+                    "GrB_Matrix_nvals");
         std::vector<GrB_Index> rowIndices(nonZeroElems);
         std::vector<GrB_Index> colIndices(nonZeroElems);
         auto vals = std::make_unique<bool[]>(nonZeroElems);
-        assert(GrB_Matrix_extractTuples_BOOL(
-                   rowIndices.data(), colIndices.data(), vals.get(),
-                   &nonZeroElems, matrix) == GrB_SUCCESS);
+        checkResult(GrB_Matrix_extractTuples_BOOL(rowIndices.data(),
+                                                  colIndices.data(), vals.get(),
+                                                  &nonZeroElems, matrix),
+                    "GrB_Matrix_extractTuples_BOOL");
 
         for (size_t i = 0; i < nonZeroElems; ++i)
         {
@@ -267,17 +272,18 @@ public:
         std::vector<GrB_Matrix> inputs(adjMatrices.size());
         std::transform(adjMatrices.begin(), adjMatrices.end(), inputs.begin(),
                        [](const auto& uniq_ptr) { return *uniq_ptr; });
-        std::vector<GrB_Matrix> outputs(symbolsCount);
-        std::transform(outputs.begin(), outputs.end(), outputs.begin(),
-                       [this](GrB_Matrix mat) {
-                           GrB_Matrix_new(&mat, GrB_BOOL, nodeNum, nodeNum);
-                           return mat;
-                       });
-
-        assert(LAGraph_CFL_reachability_adv(outputs.data(), inputs.data(),
-                                            symbolsCount, LAGraphRules.data(),
-                                            LAGraphRules.size(), nullptr,
-                                            1 | 4 | 8) == GrB_SUCCESS);
+        std::vector<GrB_Matrix> outputs(symbolsCount, nullptr);
+        std::vector<std::unique_ptr<GrB_Matrix, decltype(&GrB_Matrix_free)>>
+            outputOwners;
+        outputOwners.reserve(outputs.size());
+        for (auto& output : outputs)
+            outputOwners.emplace_back(&output, &GrB_Matrix_free);
+        char message[LAGRAPH_MSG_LEN] = {};
+        checkResult(LAGraph_CFL_reachability_adv(
+                        outputs.data(), inputs.data(), symbolsCount,
+                        LAGraphRules.data(), LAGraphRules.size(), message,
+                        1 | 4 | 8),
+                    "LAGraph_CFL_reachability_adv", message);
         convertResults(outputs[0]);
     }
 

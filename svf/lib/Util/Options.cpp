@@ -743,6 +743,13 @@ const Option<bool> Options::CFLPrintFullGraphs
     false
 );
 
+const Option<bool> Options::CFLPrintAliasStats
+(
+    "cfl-alias-statistics",
+    "Print unique non-self alias pairs within a function (PAG-backed nodes only)",
+    false
+);
+
 const Option<bool> Options::CFLAliasSinglePass
 (
     "cfl-alias-single-pass",

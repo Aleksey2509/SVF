@@ -30,6 +30,7 @@
 #include "CFL/CFLAlias.h"
 #include "CFL/CFLStat.h"
 #include "CFL/CFLVF.h"
+#include <set>
 
 using namespace SVF;
 using namespace SVFUtil;
@@ -79,6 +80,28 @@ void CFLStat::CFLSolverStat()
 /*!
  * Start here
  */
+void CFLStat::printAliasStats(const SVFIR* pag)
+{
+    std::set<std::pair<NodeID, NodeID>> pairs;
+    auto* graph = pta->getCFLGraph();
+    if (pag != nullptr)
+        for (auto* edge : graph->getCFLEdges())
+        {
+            auto src = edge->getSrcID();
+            auto dst = edge->getDstID();
+            if (edge->getEdgeKind() != graph->getStartKind() || src == dst ||
+                !pag->hasGNode(src) || !pag->hasGNode(dst))
+                continue;
+            auto* srcNode = pag->getGNode(src);
+            auto* dstNode = pag->getGNode(dst);
+            if (srcNode->getFunction() == nullptr ||
+                srcNode->getFunction() != dstNode->getFunction())
+                continue;
+            pairs.emplace(std::min(src, dst), std::max(src, dst));
+        }
+    SVFUtil::outs() << "Non trivial aliases: " << pairs.size() << "\n";
+}
+
 void CFLStat::performStat()
 {
     assert((SVFUtil::isa<CFLAlias, CFLVF>(pta)) && "not an CFLAlias pass!! what else??");
