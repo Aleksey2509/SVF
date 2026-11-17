@@ -629,30 +629,24 @@ struct AdvMTXSolver : public CFLSolver
                    GrB_SUCCESS);
         }
 
-        auto& kindToAttrMap = grammar->getKindToAttrsMap();
         for (auto& edgeIt : graph->getCFLEdges())
         {
             auto SVFSymbol = GrammarBase::Symbol(edgeIt->getEdgeKind());
+            auto symbolIt = SVFToLAGraphSymbol.find(SVFSymbol);
+            // Only concrete symbols prepared for this grammar have matrices.
+            if (symbolIt == SVFToLAGraphSymbol.end())
+                continue;
 
-            // TODO Investigate this?
-            if (origTerms.count(SVFSymbol.kind) && SVFSymbol.attribute > 0)
-            {
-                if (kindToAttrMap.count(SVFSymbol.kind) == 0)
-                    continue;
-                if (kindToAttrMap.at(SVFSymbol.kind)
-                        .count(SVFSymbol.attribute) == 0)
-                    continue;
-            }
-
-            int edgeKind = SVFToLAGraphSymbol.at(SVFSymbol);
+            int edgeKind = symbolIt->second;
             if (edgeKind == -1)
                 continue;
 
             auto srcId = SVFToLAGraphNodes.at(edgeIt->getSrcID());
             auto dstId = SVFToLAGraphNodes.at(edgeIt->getDstID());
             GrB_Matrix* curTermMatrix = adjMatrices[edgeKind].get();
-            assert(GrB_Matrix_setElement_BOOL(*curTermMatrix, true, srcId,
-                                              dstId) == GrB_SUCCESS);
+            auto result = GrB_Matrix_setElement_BOOL(
+                *curTermMatrix, true, srcId, dstId);
+            checkLAGraphResult(result, "GrB_Matrix_setElement_BOOL", "");
         }
     }
 
