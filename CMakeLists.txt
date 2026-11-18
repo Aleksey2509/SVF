@@ -63,7 +63,9 @@ FetchContent_MakeAvailable(LAGraph)
 # TODO Make non local repo
 FetchContent_Declare(
     cfl-idr-with-la
-    SOURCE_DIR /home/lexotr/master_diploma/reachability/cfl-idr-with-la
+    GIT_REPOSITORY https://github.com/Aleksey2509/cfl-idr-with-la.git
+    GIT_TAG dev_adv_algo
+    GIT_PROGRESS TRUE
 )
 
 # Download and make it available
