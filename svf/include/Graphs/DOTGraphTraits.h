@@ -147,9 +147,9 @@ public:
     /// called to determine which outgoing edge of Node is the target of this
     /// edge.
     template<typename NodeT, typename EdgeIter>
-    static EdgeIter getEdgeTarget(NodeT, EdgeIter I)
+    static EdgeIter getEdgeTarget(NodeT, EdgeIter iterator)
     {
-        return I;
+        return iterator;
     }
 
     /// hasEdgeDestLabels - If this function returns true, the graph is able

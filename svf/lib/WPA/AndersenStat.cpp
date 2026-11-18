@@ -113,6 +113,12 @@ void AndersenStat::constraintGraphStat()
             numOfCopys++;
         else if(SVFUtil::isa<GepCGEdge>(*it))
             numOfGeps++;
+        else if(SVFUtil::isa<RetCGEdge>(*it))
+        {
+        }
+        else if(SVFUtil::isa<CallCGEdge>(*it))
+        {
+        }
         else
             assert(false && "what else!!");
     }

@@ -86,28 +86,20 @@ void ConstraintGraph::buildCG()
     }
 
     SVFStmt::SVFStmtSetTy& calls = getSVFStmtSet(SVFStmt::Call);
-    {
-        auto& allCalls = pag->getSVFStmtSet(SVFStmt::Call);
-        calls.insert(allCalls.begin(), allCalls.end());
-    }
     for (auto* statement : calls)
     {
         const CallPE* edge = SVFUtil::cast<CallPE>(statement);
-        auto [it, insertedFlag] =
-            callSiteToId.insert({edge->getCallSite(), callSiteToId.size()});
-        auto callerId = it->second;
         for (u32_t i = 0; i < edge->getOpVarNum(); ++i)
         {
+            auto [it, insertedFlag] = callSiteToId.insert(
+                {edge->getOpCallICFGNode(i), callSiteToId.size()});
+            auto callerId = it->second;
             addCopyCGEdge(edge->getOpVarID(i), edge->getResID());
             addCallCGEdge(edge->getOpVarID(i), edge->getResID(), callerId);
         }
     }
 
     SVFStmt::SVFStmtSetTy& rets = getSVFStmtSet(SVFStmt::Ret);
-    {
-        auto& allRets = pag->getSVFStmtSet(SVFStmt::Ret);
-        rets.insert(allRets.begin(), allRets.end());
-    }
     for (auto* statement : rets)
     {
         const RetPE* edge = SVFUtil::cast<RetPE>(statement);
@@ -265,7 +257,7 @@ CallCGEdge* ConstraintGraph::addCallCGEdge(NodeID src, NodeID dst,
 
     ConstraintNode* srcNode = getConstraintNode(src);
     ConstraintNode* dstNode = getConstraintNode(dst);
-    if (hasEdge(srcNode, dstNode, ConstraintEdge::Call) || srcNode == dstNode)
+    if (hasEdge(srcNode, dstNode, ConstraintEdge::Call, callerId) || srcNode == dstNode)
         return nullptr;
 
     CallCGEdge* edge = new CallCGEdge(srcNode, dstNode, edgeIndex++, callerId);
@@ -285,7 +277,7 @@ RetCGEdge* ConstraintGraph::addRetCGEdge(NodeID src, NodeID dst,
 
     ConstraintNode* srcNode = getConstraintNode(src);
     ConstraintNode* dstNode = getConstraintNode(dst);
-    if (hasEdge(srcNode, dstNode, ConstraintEdge::Ret) || srcNode == dstNode)
+    if (hasEdge(srcNode, dstNode, ConstraintEdge::Ret, callerId) || srcNode == dstNode)
         return nullptr;
 
     RetCGEdge* edge = new RetCGEdge(srcNode, dstNode, edgeIndex++, callerId);

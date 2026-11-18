@@ -21,6 +21,7 @@ public:
         retKind_ = grammar_->strToKind("ret");
         gepKind_ = grammar_->strToKind("gep");
         gepBarKind_ = grammar_->strToKind("gepbar");
+        bracketKinds = {callKind_, retKind_, gepKind_, gepBarKind_};
 
         for (auto&& [termStr, termId] : grammar_->getTerminals())
         {
@@ -61,12 +62,18 @@ public:
 
         if (kindToAttr.count(callKind_))
         {
-            assert(kindToAttr.count(retKind_));
             auto& calls = kindToAttr.at(callKind_);
-
-            assert(calls == kindToAttr.at(retKind_));
             assert(!calls.empty());
-            callMaxFunInd = *std::max_element(calls.begin(), calls.end()) + 1;
+            callMaxFunInd = std::max<size_t>(
+                *std::max_element(calls.begin(), calls.end()) + 1,
+                callMaxFunInd);
+        }
+        if (kindToAttr.count(retKind_))
+        {
+            auto& rets = kindToAttr.at(retKind_);
+            assert(!rets.empty());
+            callMaxFunInd = std::max<size_t>(
+                *std::max_element(rets.begin(), rets.end()) + 1, callMaxFunInd);
         }
 
         if (kindToAttr.count(gepKind_))
@@ -204,9 +211,14 @@ public:
             auto dstId = SVFToLAGraphNodes.at(edgeIt->getDstID());
 
             auto attribute = edgeIt->getEdgeAttri();
-            if (copyKinds_.count(edgeKind) > 0 ||
+            if (copyKinds_.count(edgeKind) == 0 &&
+                bracketKinds.count(edgeKind) == 0)
+            {
+                continue;
+            }
+            if (bracketKinds.count(edgeKind) == 0 ||
                 ((edgeKind == gepKind_ || edgeKind == gepBarKind_) &&
-                 attribute == 0))
+                 (attribute == 0 || unsigned(attribute) >= gepMaxInd)))
             {
                 if ((callOrRetEdges.count(srcId) > 0 &&
                      callOrRetEdges[srcId].count(dstId) > 0) ||
@@ -307,6 +319,7 @@ public:
 
 private:
     std::unordered_set<int> copyKinds_;
+    std::unordered_set<int> bracketKinds;
     int callKind_;
     int retKind_;
     int gepKind_;

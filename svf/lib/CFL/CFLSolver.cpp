@@ -413,14 +413,14 @@ void MTXSolver::convertResultFromLAGraph(GrB_Matrix matrix, Symbol label)
     auto vals = std::make_unique<bool[]>(nonZeroElems);
     GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
                                   vals.get(), &nonZeroElems, matrix);
-    bool dyckSolverPresent = dyckSolver != nullptr;
+    bool useDyckSolverResult = dyckSolver != nullptr && label.kind == grammar->getStartKind();
     for (size_t i = 0; i < nonZeroElems; ++i)
     {
         if (!vals[i])
             continue;
         auto srcId = LAGraphToSVFNodes[rowIndices[i]];
         auto dstId = LAGraphToSVFNodes[colIndices[i]];
-        if (dyckSolverPresent && !dyckSolver->isAccessible(srcId, dstId))
+        if (useDyckSolverResult && !dyckSolver->isAccessible(srcId, dstId))
             continue;
         auto* SrcNode = graph->getGNode(srcId);
         auto* DstNode = graph->getGNode(dstId);

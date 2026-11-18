@@ -124,11 +124,12 @@ public:
     //// Return true if this edge exits
     inline bool hasEdge(ConstraintNode* src, ConstraintNode* dst, ConstraintEdge::ConstraintEdgeK kind)
     {
+        // A kind-only query matches any call site.
+        if (kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
+            return getEdge(src, dst, kind) != nullptr;
         ConstraintEdge edge(src, dst, kind);
-        // TODO Maybe separate for Call/Ret?
         if (kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep ||
-            kind == ConstraintEdge::VariantGep ||
-            kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
+            kind == ConstraintEdge::VariantGep)
             return directEdgeSet.find(&edge) != directEdgeSet.end();
         else if(kind == ConstraintEdge::Addr)
             return AddrCGEdgeSet.find(&edge) != AddrCGEdgeSet.end();
@@ -144,11 +145,16 @@ public:
     /// Get an edge via its src and dst nodes and kind
     inline ConstraintEdge* getEdge(ConstraintNode* src, ConstraintNode* dst, ConstraintEdge::ConstraintEdgeK kind)
     {
+        if (kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
+        {
+            for (auto* edge : src->getOutEdges())
+                if (edge->getDstNode() == dst && edge->getEdgeKind() == kind)
+                    return edge;
+            return nullptr;
+        }
         ConstraintEdge edge(src, dst, kind);
-        // TODO Maybe separate for Call/Ret?
         if (kind == ConstraintEdge::Copy || kind == ConstraintEdge::NormalGep ||
-            kind == ConstraintEdge::VariantGep ||
-            kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret)
+            kind == ConstraintEdge::VariantGep)
         {
             auto eit = directEdgeSet.find(&edge);
             return *eit;
@@ -173,6 +179,25 @@ public:
             assert(false && "no other kind!");
             return nullptr;
         }
+    }
+
+    /// Query an exact call/return edge, including its call-site identity.
+    inline ConstraintEdge* getEdge(ConstraintNode* src, ConstraintNode* dst,
+                                   ConstraintEdge::ConstraintEdgeK kind,
+                                   NodeID callerID)
+    {
+        assert((kind == ConstraintEdge::Call || kind == ConstraintEdge::Ret) &&
+               "Call-site lookup requires a call/return edge");
+        ConstraintEdge key(
+            src, dst, ConstraintEdge::makeCallSiteEdgeFlag(kind, callerID));
+        auto found = directEdgeSet.find(&key);
+        return found == directEdgeSet.end() ? nullptr : *found;
+    }
+
+    inline bool hasEdge(ConstraintNode* src, ConstraintNode* dst,
+                        ConstraintEdge::ConstraintEdgeK kind, NodeID callerID)
+    {
+        return getEdge(src, dst, kind, callerID) != nullptr;
     }
 
     /// Add a SVFIR edge into Edge map

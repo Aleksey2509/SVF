@@ -1,0 +1,16 @@
+Start:
+   V
+Terminal:
+   addr copy store load gep vgep call ret
+Productions:
+   F -> epsilon | F Copynonterm | addr Memflow | F store V load | store Memflow load | F F;
+   Fbar -> epsilon | Copynontermbar Fbar | Memflowbar addrbar | loadbar V storebar Fbar | loadbar Memflowbar storebar;
+   V -> Fbar V F | addrbar addr | Gepnontermbar_i V Gepnonterm_i | Gepnontermbar_i F Gepnonterm_i | Gepnontermbar_i Fbar Gepnonterm_i;
+   Copynonterm -> copy;
+   Copynonterm -> vgep;
+   Copynontermbar -> copybar;
+   Copynontermbar -> vgepbar;
+   Gepnonterm_i -> gep_i;
+   Gepnontermbar_i -> gepbar_i;
+   Memflow -> load store | Fbar Memflow | F Memflow Fbar | Gepnonterm_i Memflow Gepnontermbar_i | Gepnontermbar_i Memflow Gepnonterm_i;
+   Memflowbar -> storebar loadbar | Memflowbar F | F Memflowbar Fbar | Gepnonterm_i Memflowbar Gepnontermbar_i | Gepnontermbar_i Memflowbar Gepnonterm_i;

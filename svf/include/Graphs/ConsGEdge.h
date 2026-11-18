@@ -66,8 +66,14 @@ private:
     EdgeID edgeId;
 public:
     /// Constructor
-    ConstraintEdge(ConstraintNode* s, ConstraintNode* d, ConstraintEdgeK k, EdgeID id = 0) : GenericConsEdgeTy(s,d,k),edgeId(id)
+    ConstraintEdge(ConstraintNode* s, ConstraintNode* d, GEdgeFlag k, EdgeID id = 0) : GenericConsEdgeTy(s,d,k),edgeId(id)
     {
+    }
+    // Generic edge sets compare the full flag, so call-site identity belongs
+    // here rather than in a payload ignored by their comparator.
+    static GEdgeFlag makeCallSiteEdgeFlag(ConstraintEdgeK kind, NodeID callerID)
+    {
+        return GEdgeFlag(kind) | (GEdgeFlag(callerID) << EdgeKindMaskBits);
     }
     /// Destructor
     ~ConstraintEdge()
@@ -159,7 +165,6 @@ public:
 class CallCGEdge : public ConstraintEdge
 {
 private:
-    NodeID CallerID;
     CallCGEdge();                      ///< place holder
     CallCGEdge(const CallCGEdge&);     ///< place holder
     void operator=(const CallCGEdge&); ///< place holder
@@ -181,12 +186,12 @@ public:
     }
     NodeID getCallerID() const
     {
-        return CallerID;
+        return getEdgeKindWithoutMask() >> EdgeKindMaskBits;
     }
 
     /// constructor
     CallCGEdge(ConstraintNode* s, ConstraintNode* d, EdgeID id, NodeID CallerId)
-        : ConstraintEdge(s, d, Call, id), CallerID(CallerId)
+        : ConstraintEdge(s, d, makeCallSiteEdgeFlag(Call, CallerId), id)
     {
     }
 };
@@ -194,7 +199,6 @@ public:
 class RetCGEdge : public ConstraintEdge
 {
 private:
-    NodeID CallerID;
     RetCGEdge();                      ///< place holder
     RetCGEdge(const RetCGEdge&);      ///< place holder
     void operator=(const RetCGEdge&); ///< place holder
@@ -216,13 +220,13 @@ public:
     }
     NodeID getCallerID() const
     {
-        return CallerID;
+        return getEdgeKindWithoutMask() >> EdgeKindMaskBits;
     }
     //@}
 
     /// constructor
     RetCGEdge(ConstraintNode* s, ConstraintNode* d, EdgeID id, NodeID CallerId)
-        : ConstraintEdge(s, d, Ret, id), CallerID(CallerId)
+        : ConstraintEdge(s, d, makeCallSiteEdgeFlag(Ret, CallerId), id)
     {
     }
 };

@@ -367,6 +367,7 @@ struct AdvMTXSolver : public CFLSolver
         setupGraphNodesMaps();
         setupRules();
         LAGraphRules = initRules();
+        dyckSolver = getDyckSolver(_graph, _grammar);
     }
 
     [[noreturn]] void rejectIndexedGrammar(const std::string& reason,
@@ -807,10 +808,17 @@ struct AdvMTXSolver : public CFLSolver
         auto vals = std::make_unique<bool[]>(nonZeroElems);
         GrB_Matrix_extractTuples_BOOL(rowIndices.data(), colIndices.data(),
                                       vals.get(), &nonZeroElems, matrix);
+        bool useDyckSolverResult =
+            dyckSolver != nullptr && label.kind == grammar->getStartKind();
         for (size_t i = 0; i < nonZeroElems; ++i)
         {
             if (!vals[i])
                 continue;
+            auto srcId = LAGraphToSVFNodes[rowIndices[i]];
+            auto dstId = LAGraphToSVFNodes[colIndices[i]];
+            if (useDyckSolverResult && !dyckSolver->isAccessible(srcId, dstId))
+                continue;
+
             auto* SrcNode =
                 graph->getGNode(LAGraphToSVFNodes.at(rowIndices[i]));
             auto* DstNode =
@@ -844,6 +852,11 @@ struct AdvMTXSolver : public CFLSolver
         outputOwners.reserve(outputs.size());
         for (auto& output : outputs)
             outputOwners.emplace_back(&output, &GrB_Matrix_free);
+        if (dyckSolver)
+        {
+            dyckSolver->setup(SVFToLAGraphNodes, LAGraphToSVFNodes);
+            dyckSolver->solve();
+        }
 
         auto begin_first = std::chrono::high_resolution_clock::now();
         const u32_t configuredOptimizations =
@@ -912,6 +925,8 @@ private:
     std::vector<std::unique_ptr<GrB_Matrix, GrB_Info (*)(GrB_Matrix* mat)>>
         adjMatrices;
     std::vector<LAGraph_rule_EWCNF> LAGraphRules;
+
+    std::unique_ptr<CFLDyckBase> dyckSolver;
 };
 
 /// Solver Utilize CFLData
